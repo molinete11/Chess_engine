@@ -1,6 +1,9 @@
 const std = @import("std");
 const expect = std.testing.expect;
 
+
+
+
 const side = enum(u2){
     white,
     black,
@@ -115,7 +118,7 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
         if((blokers & (((@as(u64, 1)) << @intCast(8 * @as(u8, r3[0]))) << file) ) > 0){
             break;
         }
-        std.log.info("r3 {}\n", .{r3[0]});
+        std.log.debug("r3 {}\n", .{r3[0]});
         res |= (@as(u64, 1) << @intCast(8 * @as(u8, r3[0]))) << file;
         
         r3 = @subWithOverflow(r3[0], 1);
@@ -253,6 +256,8 @@ pub fn initBitBoards() void {
     createRookMask();
 
     initRookMagicTable();
+
+    
 }
 
 test "LookUpTable Pawn" {
