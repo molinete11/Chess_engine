@@ -6,7 +6,7 @@ const side = enum(u2){
     black,
 };
 
-const squares = enum(u8){
+pub const squares = enum(u8){
     a1, b1, c1, d1, e1, f1, g1, h1, 
     a2, b2, c2, d2, e2, f2, g2, h2,
     a3, b3, c3, d3, e3, f3, g3, h3,
@@ -15,6 +15,28 @@ const squares = enum(u8){
     a6, b6, c6, d6, e6, f6, g6, h6,
     a7, b7, c7, d7, e7, f7, g7, h7,
     a8, b8, c8, d8, e8, f8, g8, h8,
+};
+
+const mDiagonalShifts: [64]i8 = [_]i8{
+    0,-1,-2,-3,-4,-5,-6,-7,
+    1, 0,-1,-2,-3,-4,-5,-6,
+    2, 1, 0,-1,-2,-3,-4,-5,
+    3, 2, 1, 0,-1,-2,-3,-4,
+    4, 3, 2, 1, 0,-1,-2,-3,
+    5, 4, 3, 2, 1, 0,-1,-2,
+    6, 5, 4, 3, 2, 1, 0,-1,
+    7, 6, 5, 4, 3, 2, 1, 0,
+};
+
+const aDiagonalShifts: [64]i8 = [_]i8{
+   -7,-6,-5,-4,-3,-2,-1, 0,
+   -6,-5,-4,-3,-2,-1, 0, 1,
+   -5,-4,-3,-2,-1, 0, 1, 2,
+   -4,-3,-2,-1, 0, 1, 2, 3,
+   -3,-2,-1, 0, 1, 2, 3, 4,
+   -2,-1, 0, 1, 2, 3, 4, 5,
+   -1, 0, 1, 2, 3, 4, 5, 6,
+    0, 1, 2, 3, 4, 5, 6, 7,
 };
 
 var bitBoards : [12]u64 = [_]u64{
@@ -50,14 +72,14 @@ const pawnLookUpTable  : [2][64]u64 = initPawnLookUpTable();
 const knightLookUpTable : [64]u64 = initKnightLookUpTable();
 const kingLookUpTable : [64]u64 = initKingLookUpTable();
 
-const bishopMask : [64]u64 = createBishopMask();
+pub const bishopMask : [64]u64 = createBishopMask();
 const rookMask : [64]u64 = createRookMask();
 
-var bishopMagics : [64]u64 = undefined;
-var rookMagics : [64]u64 = undefined;
+const bishopMagics : [64]u64 = undefined;
+const rookMagics : [64]u64 = undefined;
 
-var bishopMagicTable  : [64][512]u64 = undefined;
-pub var rookMagicTable : [64][4096]u64 = undefined;
+pub const bishopMagicTable  : [64][512]u64 = initBishopMagicTable();
+pub const rookMagicTable : [64][4096]u64 = initRookMagicTable();
 
 pub fn random64Bit() u64{
     var prng = std.Random.DefaultPrng.init(1);
@@ -66,7 +88,6 @@ pub fn random64Bit() u64{
     const res =  @mulWithOverflow(prng.random().int(u64), rd[0]) ;
     return res[0];
 }
-
 
 pub inline fn popLstb(bb : u64) u64{
     return bb & (bb - 1);
@@ -81,7 +102,7 @@ pub inline fn popBit(bb : u64, square : u8) u64{
 }
 
 fn generateRookAttacks(square : u8, blokers : u64) u64{
-    @setEvalBranchQuota(2260000);
+    @setEvalBranchQuota(2721440);
     comptime var res : u64 = 0;
 
     const rank : u3 = @intCast(square >> 3);
@@ -139,7 +160,82 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
     return res;
 }
 
-fn initRookMagicTable() void{
+pub fn generateBishopAttacks(square : u8, blokers : u64) u64{
+    @setEvalBranchQuota(100000000);
+    comptime var res : u64 = 0;
+
+    const rank : u3 = @intCast(square >> 3);
+    const file : u3 = @intCast(square & 7);
+    
+    comptime var r11 = @addWithOverflow(rank, 1); // 1 rank
+    comptime var r12 = @addWithOverflow(file, 1); // 2 file
+
+    inline while(r11[0] < 8 and r12[0] < 8 and r11[1] != 1 and r12[1] != 1){
+        const nPos = @as(u64, 1) << @intCast(8 * @as(u8, r11[0])) << r12[0];
+
+        if(blokers & nPos > 0){
+            res |= nPos;
+            break;
+        }
+
+        res |= nPos;
+        r11 = @addWithOverflow(r11[0], 1);
+        r12 = @addWithOverflow(r12[0], 1);
+    }
+
+    comptime var r21 = @subWithOverflow(rank, 1);
+    comptime var r22 = @addWithOverflow(file, 1);
+
+    inline while(r21[0] >= 0 and r22[0] < 8 and r21[1] != 1 and r22[1] != 1){
+        const nPos = @as(u64, 1) << @intCast(8 * @as(u8, r21[0])) << r22[0];
+
+        if(blokers & nPos > 0){
+            res |= nPos;
+            break;
+        }
+
+        res |= nPos;
+        r21 = @subWithOverflow(r21[0], 1);
+        r22 = @addWithOverflow(r22[0], 1);
+    }
+
+    comptime var r31 = @subWithOverflow(rank, 1);
+    comptime var r32 = @subWithOverflow(file, 1);
+
+    inline while(r31[0] >= 0 and r32[0] >= 0 and r31[1] != 1 and r32[1] != 1){
+        const nPos = @as(u64, 1) << @intCast(8 * @as(u8, r31[0])) << r32[0];
+
+        if(blokers & nPos > 0){
+            res |= nPos;
+            break;
+        }
+
+        res |= nPos;
+        r31 = @subWithOverflow(r31[0], 1);
+        r32 = @subWithOverflow(r32[0], 1);
+    }
+
+    comptime var r41 = @addWithOverflow(rank, 1);
+    comptime var r42 = @subWithOverflow(file, 1);
+
+    inline while(r41[0] < 8 and r42[0] >= 0 and r41[1] != 1 and r42[1] != 1){
+        const nPos = @as(u64, 1) << @intCast(8 * @as(u8, r41[0])) << r42[0];
+
+        if(blokers & nPos > 0){
+            res |= nPos;
+            break;
+        }
+
+        res |= nPos;
+        r41 = @addWithOverflow(r41[0], 1);
+        r42 = @subWithOverflow(r42[0], 1);
+    }
+
+    return res;
+}
+
+fn initRookMagicTable() [64][4096]u64{
+    var masks: [64][4096]u64 = undefined;
     comptime var i : u8 = 0;
     inline for(0..64) |_|{
         comptime var subset : u64 = 0;
@@ -149,7 +245,7 @@ fn initRookMagicTable() void{
 
             //std.log.debug("subset pos {}: 0x{X}\n", .{nsubset, subset});
 
-            rookMagicTable[i][nsubset] = comptime generateRookAttacks(i, subset);
+            masks[i][nsubset] = comptime generateRookAttacks(i, subset);
 
             //std.log.debug("subset moves: 0x{X}\n", .{rookMagicTable[i][nsubset]});
             
@@ -163,10 +259,58 @@ fn initRookMagicTable() void{
         }
         i += 1;
     }
+    return masks;
 }
 
-fn createBishopMask() [64]u64{
-    
+fn initBishopMagicTable() [64][512]u64{
+    var masks: [64][512]u64 = undefined;
+    comptime var i: u6 = 0;
+    inline for(0..63) |_|{
+
+        comptime var subset: u64 = 0;
+        comptime var nsubset: u64 = 0;
+
+        while(true){
+
+            masks[i][nsubset] = generateBishopAttacks(i, subset);
+
+            subset = @subWithOverflow(subset, bishopMask[i])[0] & bishopMask[i];
+
+            nsubset += 1;
+            if(nsubset >= 512){
+                break;
+            }
+        }
+
+        i += 1;
+    }
+    return masks;
+}
+
+pub fn createBishopMask() [64]u64{
+    var masks: [64]u64 = undefined;
+    var i: u8 = 0;
+    for(0..64) |_|{
+        masks[i] = 0;
+
+        if(mDiagonalShifts[i] >= 0){
+            masks[i] |= mDiagonal << @intCast(8 * mDiagonalShifts[i]);
+        }else if(mDiagonalShifts[i] < 0){
+            masks[i] |= mDiagonal >> @intCast(8 * (-mDiagonalShifts[i]));
+        }
+
+        if(aDiagonalShifts[i] >= 0){
+            masks[i] |= aDiagonal << @intCast(8 * aDiagonalShifts[i]);
+        }else if(aDiagonalShifts[i] < 0){
+            masks[i] |= aDiagonal >> @intCast(8 * (-aDiagonalShifts[i]));
+        }
+
+        masks[i] ^= @as(u64, 1) << @intCast(i);
+        masks[i] &= notAFile & notHFile & (~rank1 & ~rank8);
+        i += 1;
+    }   
+
+    return masks;
 }
 
 fn createRookMask() [64]u64{
@@ -251,30 +395,6 @@ pub fn printBitBoard(bb : u64) void {
 }
 
 pub fn initBitBoards() void {
-    initRookMagicTable();
+   
 }
 
-test "LookUpTable Pawn" {
-    try expect(pawnLookUpTable[0][@intFromEnum(squares.b2)] == @as(u64, 0x2020000));
-    try expect(pawnLookUpTable[0][@intFromEnum(squares.a2)] == @as(u64, 0x1010000));
-    try expect(pawnLookUpTable[1][@intFromEnum(squares.b7)] == @as(u64, 0x20200000000));
-}
-
-test "LookUpTable Knight" {
-    try expect(knightLookUpTable[@intFromEnum(squares.a1)] == @as(u64, 0x20400));
-    try expect(knightLookUpTable[@intFromEnum(squares.d4)] == @as(u64, 0x142200221400));
-    try expect(knightLookUpTable[@intFromEnum(squares.h2)] == @as(u64, 0x40200020));
-    try expect(knightLookUpTable[@intFromEnum(squares.h7)] == @as(u64, 0x2000204000000000));
-}
-
-test "LookUpTable King" {
-    try expect(kingLookUpTable[@intFromEnum(squares.a1)] == @as(u64, 0x302));
-    try expect(kingLookUpTable[@intFromEnum(squares.d4)] == @as(u64, 0x1c141c0000));
-    try expect(kingLookUpTable[@intFromEnum(squares.h2)] == @as(u64, 0xc040c0));
-    try expect(kingLookUpTable[@intFromEnum(squares.h7)] == @as(u64, 0xc040c00000000000));
-}
-
-test "rook mask"{
-    try expect(rookMask[@intFromEnum(squares.a1)] == 0x101010101017E);
-    try expect(rookMask[@intFromEnum(squares.b1)] == 0x202020202027c);
-}
