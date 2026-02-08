@@ -1,9 +1,6 @@
 const std = @import("std");
 const expect = std.testing.expect;
 
-
-
-
 const side = enum(u2){
     white,
     black,
@@ -40,26 +37,27 @@ const notAFile : u64 = 0xfefefefefefefefe;
 const notHFile : u64 = 0x7f7f7f7f7f7f7f7f;
 const notABFile : u64 = 0xfcfcfcfcfcfcfcfc;
 const notHGFile : u64 = 0x3f3f3f3f3f3f3f3f;
-
 const aFile : u64 = 0x0101010101010101;
-
 const rank1 : u64 = 0x00000000000000FF;
 const rank2 : u64 = 0x000000000000FF00;
 const rank7 : u64 = 0x00FF000000000000;
 const rank8 : u64 = 0xFF00000000000000;
 
-var pawnLookUpTable   : [2][64]u64 = undefined;
-var knightLookUpTable : [64]u64 = undefined;
-var kingLookUpTable   : [64]u64 = undefined;
+pub const mDiagonal: u64 = 0x8040201008040201;
+pub const aDiagonal: u64 = 0x102040810204080;
 
-var bishopMask : [64]u64 = undefined;
-var rookMask : [64]u64 = undefined;
+const pawnLookUpTable  : [2][64]u64 = initPawnLookUpTable();
+const knightLookUpTable : [64]u64 = initKnightLookUpTable();
+const kingLookUpTable : [64]u64 = initKingLookUpTable();
+
+const bishopMask : [64]u64 = createBishopMask();
+const rookMask : [64]u64 = createRookMask();
 
 var bishopMagics : [64]u64 = undefined;
 var rookMagics : [64]u64 = undefined;
 
 var bishopMagicTable  : [64][512]u64 = undefined;
-var rookMagicTable : [64][4096]u64 = undefined;
+pub var rookMagicTable : [64][4096]u64 = undefined;
 
 pub fn random64Bit() u64{
     var prng = std.Random.DefaultPrng.init(1);
@@ -70,32 +68,33 @@ pub fn random64Bit() u64{
 }
 
 
-inline fn popLstb(bb : u64) u64{
+pub inline fn popLstb(bb : u64) u64{
     return bb & (bb - 1);
 }
 
-inline fn setBit(bb : u64, square : u8) u64{
+pub inline fn setBit(bb : u64, square : u8) u64{
     return bb | (@as(u64, 1) << square);
 }
 
-inline fn popBit(bb : u64, square : u8) u64{
+pub inline fn popBit(bb : u64, square : u8) u64{
     return bb & (bb ^ (@as(u64, 1) << square));
 }
 
 fn generateRookAttacks(square : u8, blokers : u64) u64{
-    var res : u64 = 0;
+    @setEvalBranchQuota(2260000);
+    comptime var res : u64 = 0;
 
     const rank : u3 = @intCast(square >> 3);
     const file : u3 = @intCast(square & 7);
-
     
-    var r1 = @addWithOverflow(rank, 1) ;
-    var r2 = @addWithOverflow(file, 1);
-    var r3 = @subWithOverflow(rank, 1);
-    var r4 = @subWithOverflow(file, 1);
+    comptime var r1 = @addWithOverflow(rank, 1);
+    comptime var r2 = @addWithOverflow(file, 1);
+    comptime var r3 = @subWithOverflow(rank, 1);
+    comptime var r4 = @subWithOverflow(file, 1);
 
     while(r1[0] < 8 and r1[1] != 1) {  // rank up
-        if(blokers & ((@as(u64, 1) << @intCast(8 * @as(u8, r1[0]))) << file) > 0){ 
+        if(blokers & ((@as(u64, 1) << @intCast(8 * @as(u8, r1[0]))) << file) > 0){
+            res |=( (@as(u64, 1) << @intCast( 8 * @as(u8, r1[0]) )) << file ); 
             break;
         }
         
@@ -105,6 +104,7 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
 
     while(r2[0] < 8 and r2[1] != 1){  // file right
         if(blokers & (@as(u64, 1) << r2[0]) << @intCast(8 * @as(u8, rank)) > 0){
+            res |= (@as(u64, 1) << @intCast(r2[0]) << @intCast(8 * @as(u8, rank)));
             break;
         }
 
@@ -114,8 +114,8 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
 
 
     while(r3[0] >= 0 and r3[1] != 1){ // rank down
-
         if((blokers & (((@as(u64, 1)) << @intCast(8 * @as(u8, r3[0]))) << file) ) > 0){
+            res |= (@as(u64, 1) << @intCast(8 * @as(u8, r3[0]))) << file;
             break;
         }
         std.log.debug("r3 {}\n", .{r3[0]});
@@ -128,6 +128,7 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
         const cPos : u64 = (@as(u64, 1) << r4[0]) << @intCast(8 * @as(u64, rank));
 
         if((blokers & cPos) > 0){
+            res |= cPos;
             break;
         }
 
@@ -139,25 +140,18 @@ fn generateRookAttacks(square : u8, blokers : u64) u64{
 }
 
 fn initRookMagicTable() void{
-    for(0..64) |i|{
+    comptime var i : u8 = 0;
+    inline for(0..64) |_|{
+        comptime var subset : u64 = 0;
+        comptime var nsubset : u64 = 0;
 
-        std.log.debug("square {}\n", .{i});
+        inline while(true){ // start the subset brute force of i square
 
-        var subset : u64 = 0;
-        var nsubset : u64 = 0;
+            //std.log.debug("subset pos {}: 0x{X}\n", .{nsubset, subset});
 
-        //const rank : u3 = @intCast(i >> 3);
-        const file : u3 = @intCast(i & 7);
-        _ = file;
-        //const pos : u64 = @as(u64, 1) << @intCast(i);
+            rookMagicTable[i][nsubset] = comptime generateRookAttacks(i, subset);
 
-        while(true){ // start the subset brute force of i square
-
-            std.log.debug("subset pos {}: 0x{X}\n", .{nsubset, subset});
-
-            rookMagicTable[i][nsubset] = generateRookAttacks(@intCast(i), subset);
-
-            std.log.debug("subset moves: 0x{X}\n", .{rookMagicTable[i][nsubset]});
+            //std.log.debug("subset moves: 0x{X}\n", .{rookMagicTable[i][nsubset]});
             
             subset = (@subWithOverflow(subset, rookMask[i])[0]) & rookMask[i];
 
@@ -167,37 +161,43 @@ fn initRookMagicTable() void{
             }
             
         }
+        i += 1;
     }
 }
 
-
-fn createBishopMask() void{
-
+fn createBishopMask() [64]u64{
+    
 }
 
-fn createRookMask() void{
+fn createRookMask() [64]u64{
+    var masks : [64]u64 = undefined;
     for(0..64) |i|{
         const rank: u3 = @intCast(i >> 3);
         const file: u3 = @intCast(i & 7);
         const mask : u64 = (((rank1 << (@as(u6, rank) * 8)) & (notAFile & notHFile)) | ((aFile << file) & ~(rank1 | rank8)));
         //std.debug.print("0x{X}\n", .{mask});
-        rookMask[i] = mask & (mask ^ (@as(u64, 1) << @intCast(i)));
+        masks[i] = mask & (mask ^ (@as(u64, 1) << @intCast(i)));
         //std.debug.print("{}: 0x{X}\n", .{i,rookMask[i]});
     }
+    return masks;
 }
 
-fn initPawnLookUpTable() void{
+fn initPawnLookUpTable() [2][64]u64{
+    var moves: [2][64]u64 = undefined;
     for(0..64) |i | {
         const pos : u64 = @as(u64, 1) << @intCast(i);
-        pawnLookUpTable[0][i] = (pos << 8) | ((pos & rank2) << 16);
-        pawnLookUpTable[1][i] = (pos >> 8) | ((pos & rank7) >> 16);
+        moves[0][i] = (pos << 8) | ((pos & rank2) << 16);
+        moves[1][i] = (pos >> 8) | ((pos & rank7) >> 16);
     }
+
+    return moves;
 }
 
-fn initKnightLookUpTable() void{
+fn initKnightLookUpTable() [64]u64{
+    var masks: [64]u64 = undefined;
     for(0..64) |i|{
         const pos : u64 =  @as(u64, 1) << @intCast(i);
-        knightLookUpTable[i] = ((pos << 17) & notAFile) | 
+        masks[i] = ((pos << 17) & notAFile) | 
                              ((pos << 15) & notHFile) | 
                              ((pos << 10) & notABFile) | 
                              ((pos << 6) & notHGFile) | 
@@ -206,34 +206,35 @@ fn initKnightLookUpTable() void{
                              ((pos >> 15) & notAFile) | 
                              ((pos >> 6) & notABFile);
     }
+
+    return masks;
 }
 
-fn initKingLookUpTable() void{
+fn initKingLookUpTable() [64]u64{
+    var masks: [64]u64 = undefined;
     for(0..64) |i|{
         const pos : u64 = @as(u64, 1) << @intCast(i);
-
         const sides : u64 = ((pos << 1) & notAFile) | ((pos >> 1) & notHFile);
-
-        kingLookUpTable[i] = ((sides | pos) << 8) | ((sides | pos) >> 8) | sides;
+        masks[i] = ((sides | pos) << 8) | ((sides | pos) >> 8) | sides;
     }
+    return masks;
 }
 
-fn getRookAttacks(bb : u64, sq : u8) u64{
+pub fn getRookAttacks(bb : u64, sq : u8) u64{
     bb &= rookMask[sq];
     bb *= rookMagics[sq];
     bb >>= 64-12;
     return rookMagicTable[sq][bb];
 }
 
-fn getBishopAttacks(bb : u64, sq : u8) u64{
+pub fn getBishopAttacks(bb : u64, sq : u8) u64{
     bb &= bishopMask[sq];
     bb *= bishopMagics[sq];
     bb >>= 64-9;
     return bishopMagicTable[sq][bb];
 }
 
-
-fn printBitBoard(bb : u64) void {
+pub fn printBitBoard(bb : u64) void {
     var i : u6 = 63;
     while(i > 0){
         const pos = @as(u64, 1) << @intCast(i);
@@ -250,27 +251,16 @@ fn printBitBoard(bb : u64) void {
 }
 
 pub fn initBitBoards() void {
-    initPawnLookUpTable();
-    initKnightLookUpTable();
-    initKingLookUpTable();
-    createRookMask();
-
     initRookMagicTable();
-
-    
 }
 
 test "LookUpTable Pawn" {
-    initPawnLookUpTable();
-
     try expect(pawnLookUpTable[0][@intFromEnum(squares.b2)] == @as(u64, 0x2020000));
     try expect(pawnLookUpTable[0][@intFromEnum(squares.a2)] == @as(u64, 0x1010000));
     try expect(pawnLookUpTable[1][@intFromEnum(squares.b7)] == @as(u64, 0x20200000000));
 }
 
 test "LookUpTable Knight" {
-    initKnightLookUpTable();
-
     try expect(knightLookUpTable[@intFromEnum(squares.a1)] == @as(u64, 0x20400));
     try expect(knightLookUpTable[@intFromEnum(squares.d4)] == @as(u64, 0x142200221400));
     try expect(knightLookUpTable[@intFromEnum(squares.h2)] == @as(u64, 0x40200020));
@@ -278,8 +268,6 @@ test "LookUpTable Knight" {
 }
 
 test "LookUpTable King" {
-    initKingLookUpTable();
-
     try expect(kingLookUpTable[@intFromEnum(squares.a1)] == @as(u64, 0x302));
     try expect(kingLookUpTable[@intFromEnum(squares.d4)] == @as(u64, 0x1c141c0000));
     try expect(kingLookUpTable[@intFromEnum(squares.h2)] == @as(u64, 0xc040c0));
@@ -287,8 +275,6 @@ test "LookUpTable King" {
 }
 
 test "rook mask"{
-    createRookMask();
-
-    try expect(rookMask[@intFromEnum(squares.a1)] == 0x01010101010101FE);
-    try expect(rookMask[@intFromEnum(squares.b1)] == 0x02020202020202FD);
+    try expect(rookMask[@intFromEnum(squares.a1)] == 0x101010101017E);
+    try expect(rookMask[@intFromEnum(squares.b1)] == 0x202020202027c);
 }
