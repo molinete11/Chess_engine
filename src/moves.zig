@@ -22,15 +22,6 @@ pub const Move = struct {
         rookPromotion,
         queenPromotion,
     };
-
-    const pieceType = enum(u8){
-        pawn = 1,
-        bishop,
-        knight,
-        rook,
-        queen,
-        king
-    };
 };
 
 const MoveList = struct{
@@ -63,9 +54,9 @@ pub fn generatePseudoLegalMoves(side: board.side) align(64) MoveList{
     return moves;
 }
 
-pub fn generateLegalMoves() MoveList{
+pub fn generateLegalMoves() align(64) MoveList{
     var moves = generatePseudoLegalMoves(board.toPlay);
-    const blackToPlay: u4 = @as(u4, @intFromBool(board.toPlay == board.side.black));
+    const blackToPlay: u4 = @intFromBool(board.toPlay == board.side.black);
     const king: *u64 = &board.bitBoards[5 + (6 * blackToPlay)];
 
     var i: u8 = 0;
@@ -73,8 +64,9 @@ pub fn generateLegalMoves() MoveList{
     while (i < moves.count):(i +%= 1) {
         const move: Move = moves.moves[i];
         makeMove(move);
-        if(isKingInCheck(king.*, board.toPlay,board.bitBoards[14])){
-            moves.moves[moves.count - 1] = moves.moves[i];
+        if(isSquareAttacked(king.*, board.toPlay,board.bitBoards[@intFromEnum(board.pieceBB.all)])){ 
+            //std.debug.print("Check\n", .{});
+            moves.moves[i] = moves.moves[moves.count - 1];
             moves.count -= 1;
             i -%= 1;
         }
@@ -88,10 +80,10 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
     const whiteToPlay = @intFromBool(side == board.side.white);
     var normalPush: u64 = 0;
     var doublePush: u64 = 0;
-    //var att: u64 = 0;
     var pieceBB: u4 = undefined;
     var colorBB: u4 = undefined;
     var colorCaptureBB: u4 = undefined;
+    var offset: i6 = 0;
 
     if(whiteToPlay == 1){
         normalPush = (bb << 8 & empty);
@@ -99,42 +91,41 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
         pieceBB = @intFromEnum(board.pieceBB.wPawn);
         colorBB = @intFromEnum(board.pieceBB.white);
         colorCaptureBB = @intFromEnum(board.pieceBB.black);
+        offset = -8;
     }else{
         normalPush = (bb >> 8 & empty);
         doublePush = (((bb >> 8 & empty) & board.rank6) >> 8) & empty;
         pieceBB = @intFromEnum(board.pieceBB.bPawn);
         colorBB = @intFromEnum(board.pieceBB.black);
         colorCaptureBB = @intFromEnum(board.pieceBB.white);
+        offset = 8;
     }
     
-    var pawn = bb;
     while(normalPush > 0): (normalPush &= normalPush - 1){
         const sq: u6 = @intCast(@ctz(normalPush));
         moves.moves[moves.count].to = sq;
-        moves.moves[moves.count].from = @intCast(@ctz(pawn));
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset));
         moves.moves[moves.count].flags = Move.Flags.quietMove;
         moves.moves[moves.count].pieceBB = pieceBB;
         moves.moves[moves.count].colorBB = colorBB;
         moves.moves[moves.count].captureBB = 0;
         moves.moves[moves.count].colorCaptureBB = 0;
         moves.count += 1;
-        pawn &= pawn - 1;
     }
 
-    pawn = bb;
     while(doublePush > 0): (doublePush &= doublePush - 1){
-        moves.moves[moves.count].to = @intCast(@ctz(doublePush));
-        moves.moves[moves.count].from = @intCast(@ctz(pawn));
+        const sq: u6 = @intCast(@ctz(doublePush));
+        moves.moves[moves.count].to = sq;
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset * 2));
         moves.moves[moves.count].flags = Move.Flags.doublePawnPush;
         moves.moves[moves.count].pieceBB = pieceBB;
         moves.moves[moves.count].colorBB = colorBB;
         moves.moves[moves.count].captureBB = 0;
         moves.moves[moves.count].colorCaptureBB = 0;
         moves.count += 1;
-        pawn &= pawn - 1;
     }
 
-    pawn = bb;
+    var pawn: u64 = bb;
     while(pawn > 0): (pawn &= pawn - 1){
         const sq: u6 = @intCast(@ctz(pawn));
         var m = board.getPawnAtt(sq, ~whiteToPlay) & enemy;
@@ -201,7 +192,7 @@ fn generateKnightMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: b
 
 fn generateKingMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: board.side) void{
     const sq: u6 = @intCast(@ctz(bb));
-    const enemyAtt = getSideAtt(~@intFromEnum(side), ~board.empty);
+    const enemyAtt = getSideAtt(~@intFromEnum(side), (team | enemy));
     const m = board.getKingMoves(sq) & (~team & ~enemyAtt);
 
     var captureMoves = m & enemy; 
@@ -302,7 +293,7 @@ fn generateRookMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: boa
 
     var rook = bb;
     while(rook > 0): (rook &= rook - 1){
-        const sq: u6 = @intCast(@ctz(bb));
+        const sq: u6 = @intCast(@ctz(rook));
         const m = board.getRookMoves(sq, team | enemy) & ~team;
         var captureMoves = m & enemy; 
         var quietMoves = m ^ captureMoves;
@@ -348,7 +339,7 @@ fn generateQueenMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: bo
                                (@intFromEnum(board.pieceBB.white) & ~whiteToPlay);
     var queen = bb;
     while(queen > 0): (queen &= queen - 1){
-        const sq: u6 = @intCast(@ctz(bb));
+        const sq: u6 = @intCast(@ctz(queen));
         const m = board.getQueenMoves(sq, team | enemy) & ~team;
         var captureMoves = m & enemy; 
         var quietMoves = m ^ captureMoves;
@@ -395,8 +386,8 @@ pub fn makeMove(move: Move) void{
 
     board.bitBoards[move.captureBB] ^= (to & isCapture);
     board.bitBoards[move.colorCaptureBB] ^= (to & isCapture);
-    board.empty ^= fromTo;
-    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= fromTo;
+    board.empty ^= from | (to & ~isCapture);
+    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= from | (to & ~isCapture);
 
     board.toPlay = if (board.toPlay == board.side.white) board.side.black else board.side.white;
 }
@@ -414,8 +405,9 @@ pub fn unMakeMove(move: Move) void{
 
     board.bitBoards[move.captureBB] ^= (to & isCapture);
     board.bitBoards[move.colorCaptureBB] ^= (to & isCapture);
-    board.empty ^= fromTo;
-    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= fromTo;
+    board.empty ^= from | (to & ~isCapture);
+
+    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= from | (to & ~isCapture);
 
     board.toPlay = if (board.toPlay == board.side.white) board.side.black else board.side.white;
 }
@@ -467,19 +459,39 @@ inline fn countZeroes(bb: u64) u6{
     }
 }
 
-inline fn isKingInCheck(king: u64, side: board.side, occ: u64) bool{ 
-    const enemyAtt: u64 = getSideAtt(@intFromEnum(side), occ);
+
+inline fn isSquareAttacked(sq: u64, enemySide: board.side, occ: u64) bool{
+    const enemyAtt: u64 = getSideAtt(@intFromEnum(enemySide), occ);
     
-    return (king & enemyAtt) > 0;
+    return (sq & enemyAtt) > 0;
 }
 
+pub fn perftDivide(depth: u32) void{
+    const moves = generateLegalMoves();
+    var tot: u64 = 0;
+
+    for(0..moves.count) |i|{
+        makeMove(moves.moves[i]);
+        const p = perft(depth - 1);
+        std.debug.print("{s}{s}, {} {}: {}\n", .{
+            board.getSquareChar(moves.moves[i].from), board.getSquareChar(moves.moves[i].to), 
+            moves.moves[i].from, moves.moves[i].to,
+            p 
+        });
+        tot += p;
+        unMakeMove(moves.moves[i]);
+    }
+    std.debug.print("{}\n", .{tot});
+}
 
 pub fn perft(depth: u32) u64{
     var nodes: u64 = 0;
     const moves = generateLegalMoves();
 
-    if(depth == 1){
-        return @as(u64, moves.count);
+    if(depth == 0){
+        return @as(u64, 1);
+    }else if(depth == 1){
+        return moves.count;
     }
 
     for(0..moves.count) |i|{

@@ -626,11 +626,11 @@ fn initBishopMoves() [64][512]u64{
         var j: u16 = 0;
 
         while(j < n){
-            const key = @mulWithOverflow(bishopMagics[i], subset)[0] >> bishopShifts[i];
+            const key = (bishopMagics[i] *% subset) >> bishopShifts[i];
 
             masks[i][key] = generateBishopAttacks(i, subset);
 
-            subset = @subWithOverflow(subset, bishopMask[i])[0] & bishopMask[i];
+            subset = (subset -% bishopMask[i]) & bishopMask[i];
             j += 1;
         }
 
@@ -674,14 +674,14 @@ pub fn initRookMoves() [64][4096]u64 {
 
 pub inline fn getRookMoves(sq : u8, occ : u64) u64{
     var key = occ & rookMask[sq];
-    key = @mulWithOverflow(key, rookMagics[sq])[0];
+    key *%= rookMagics[sq];
     key >>= rookShifts[sq];
     return rookMagicTable[sq][key];
 }
 
 pub inline fn getBishopMoves(sq: u8, occ: u64) u64{
     var key = occ & bishopMask[sq];
-    key = @mulWithOverflow(key, bishopMagics[sq])[0];
+    key *%= bishopMagics[sq];
     key >>= bishopShifts[sq];
     return bishopMagicTable[sq][key];
 }
