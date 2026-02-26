@@ -7,17 +7,17 @@ pub fn main() !void {
     uci.uciInit();
     //try uci.uciLoop();
     //_ = moves.generateLegalMoves();
-    //for(1..8) |i|{
-        //var timer = try std.time.Timer.start();
-        //const start = timer.read();
-        //const res = moves.perft(@intCast(i));
-        //std.mem.doNotOptimizeAway(res);
-        //const end = timer.read();
+    for(1..8) |i|{
+        var timer = try std.time.Timer.start();
+        const start = timer.read();
+        const res = moves.perft(@intCast(i));
+        std.mem.doNotOptimizeAway(res);
+        const end = timer.read();
 
-        //std.debug.print("peft depth {}: nodes {}, time {}s\n", .{i, res, @as(f64, @floatFromInt(end - start)) / @as(f64, 1000000000)});
-    //}
+        std.debug.print("peft depth {}: nodes {}, time {}s\n", .{i, res, @as(f64, @floatFromInt(end - start)) / @as(f64, 1000000000)});
+    }
     //std.debug.print("{}\n", .{moves.perft(4)});
-    std.debug.print("{}\n", .{moves.perftDivide(7)});
+    //std.debug.print("{}\n", .{moves.perftDivide(7)});
 }
 
 test "rookMagic" {

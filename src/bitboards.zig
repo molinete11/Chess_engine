@@ -6,23 +6,12 @@ pub var bitBoards: [15]u64 = undefined;
 
 pub var toPlay: side = undefined;
 
-pub var whiteKing: kingInfo = undefined;
-pub var blackKing: kingInfo = undefined;
+pub var castleRights: u4 = undefined; // 1 bit white king side castle, 2 bit white queen side castle
+                                      // 3 bit black king side castle, 4 bit black queen side castle
 
 pub var empty: u64 = 0;
 
-pub var enPassant: u64 = 0;
-
-pub const kingInfo = struct{
-
-    rights: castleRights,
-    pos: u6,
-
-    const castleRights = struct {
-        kingSide: bool,
-        queenSide: bool,
-    };
-};
+pub var enPassant: u6 = 0;
 
 pub const side = enum(u1){
     white,
@@ -100,6 +89,7 @@ pub const rank1: u64 = 0x00000000000000FF;
 pub const rank2: u64 = 0x000000000000FF00;
 pub const rank3: u64 = 0x0000000000FF0000;
 pub const rank4: u64 = 0x00000000FF000000;
+pub const rank5: u64 = 0x000000FF00000000;
 pub const rank6: u64 = 0x0000FF0000000000;
 pub const rank7: u64 = 0x00FF000000000000;
 pub const rank8: u64 = 0xFF00000000000000;
@@ -738,12 +728,7 @@ pub fn getPieceBB(sq: u8) u4{
 }
 
 pub fn initStartingPos() void{
-    whiteKing.pos = 4;
-    whiteKing.rights.kingSide = true;
-    whiteKing.rights.kingSide = true;
-    blackKing.pos = 60;
-    blackKing.rights.kingSide = true;
-    blackKing.rights.queenSide = true;
+    castleRights = 0xF;
     
     toPlay = side.white;
     bitBoards[@intFromEnum(pieceBB.wPawn)] =  0x000000000000ff00;

@@ -32,7 +32,6 @@ pub fn uciLoop() !void{
 
         if(cmpstr(u8, token, "quit")){
             exit = true;
-
         }
         else if(cmpstr(u8, token, "uci")){
             try stdout.print("id name MoFish\n", .{});
