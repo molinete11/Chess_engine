@@ -27,6 +27,10 @@ pub const Move = struct {
         knightPromotion,
         rookPromotion,
         queenPromotion,
+        bishopPromotionCapture,
+        knightPromotionCapture,
+        rookPromotionCapture,
+        queenPromotionCapture
     };
 };
 
@@ -81,11 +85,15 @@ pub fn generateLegalMoves() align(64) MoveList{
     return moves;
 }
 
+
+
+
 fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: board.side) void{
     const whiteToPlay = @intFromBool(side == board.side.white);
     var normalPush: u64 = 0;
     var doublePush: u64 = 0;
     var pieceBB: u4 = undefined;
+    var promotions: u64 = 0;
     var colorBB: u4 = undefined;
     var colorCaptureBB: u4 = undefined;
     var offset: i6 = 0;
@@ -96,6 +104,8 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
         pieceBB = @intFromEnum(board.pieceBB.wPawn);
         colorBB = @intFromEnum(board.pieceBB.white);
         colorCaptureBB = @intFromEnum(board.pieceBB.black);
+        promotions = normalPush & board.rank8;
+        normalPush ^= promotions;
         offset = -8;
     }else{
         normalPush = (bb >> 8 & empty);
@@ -103,6 +113,8 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
         pieceBB = @intFromEnum(board.pieceBB.bPawn);
         colorBB = @intFromEnum(board.pieceBB.black);
         colorCaptureBB = @intFromEnum(board.pieceBB.white);
+        promotions = normalPush & board.rank1;
+        normalPush ^= promotions;
         offset = 8;
     }
     
@@ -130,6 +142,46 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
         moves.count += 1;
     }
 
+    while(promotions > 0): (promotions &= promotions - 1){
+        const sq: u6 = @intCast(@ctz(promotions));
+        moves.moves[moves.count].to = sq;
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset));
+        moves.moves[moves.count].flags = Move.Flags.bishopPromotion;
+        moves.moves[moves.count].pieceBB = pieceBB;
+        moves.moves[moves.count].colorBB = colorBB;
+        moves.moves[moves.count].captureBB = 0;
+        moves.moves[moves.count].colorCaptureBB = 0;
+        moves.count += 1; 
+
+        moves.moves[moves.count].to = sq;
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset));
+        moves.moves[moves.count].flags = Move.Flags.knightPromotion;
+        moves.moves[moves.count].pieceBB = pieceBB;
+        moves.moves[moves.count].colorBB = colorBB;
+        moves.moves[moves.count].captureBB = 0;
+        moves.moves[moves.count].colorCaptureBB = 0;
+        moves.count += 1; 
+
+        moves.moves[moves.count].to = sq;
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset));
+        moves.moves[moves.count].flags = Move.Flags.rookPromotion;
+        moves.moves[moves.count].pieceBB = pieceBB;
+        moves.moves[moves.count].colorBB = colorBB;
+        moves.moves[moves.count].captureBB = 0;
+        moves.moves[moves.count].colorCaptureBB = 0;
+        moves.count += 1; 
+
+        moves.moves[moves.count].to = sq;
+        moves.moves[moves.count].from = sq +% @as(u6, @bitCast(offset));
+        moves.moves[moves.count].flags = Move.Flags.queenPromotion;
+        moves.moves[moves.count].pieceBB = pieceBB;
+        moves.moves[moves.count].colorBB = colorBB;
+        moves.moves[moves.count].captureBB = 0;
+        moves.moves[moves.count].colorCaptureBB = 0;
+        moves.count += 1; 
+
+    }
+
     var pawn: u64 = bb;
     const epSquare: u64 =  (@as(u64, 1) << board.enPassant);
     while(pawn > 0): (pawn &= pawn - 1){
@@ -151,6 +203,7 @@ fn generatePawnMoves(moves: *MoveList, bb: u64, empty: u64, enemy: u64, side: bo
         }
     }
 }
+
 
 fn generateKnightMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: board.side) void{
     var knight = bb;
@@ -448,15 +501,6 @@ pub fn makeMove(move: *Move) void{
     board.bitBoards[move.pieceBB] ^= fromTo;
     board.bitBoards[rookBB] ^= rookFromTo;
     board.bitBoards[move.colorBB] ^= fromTo | rookFromTo;
-
-    //std.debug.print("move: {any}\n", .{move});
-
-    //std.debug.print("rookBB {}, fromTO {}\n", .{rookBB, rookFromTo});
-    //std.debug.print("fromTo {}\n", .{fromTo});
-    //std.debug.print("general move{}\n", .{generalMove});
-    //std.debug.print("white Rook {}\n", .{board.bitBoards[3]});
-    //std.debug.print("black Rook {}\n", .{board.bitBoards[9]});
-    
 
     board.enPassant = (move.to +% @as(u6, @bitCast(offset))) & isDoublePawnPush;
 
