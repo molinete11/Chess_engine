@@ -19,8 +19,8 @@ pub const Move = struct {
     const Flags = enum(u4){
         quietMove,
         doublePawnPush,
-        kingCastle,
-        queenCastle,
+        kingSideCastle,
+        queenSideCastle,
         capture,
         epCapture,
         bishopPromotion,
@@ -202,13 +202,14 @@ fn generateKingMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: boa
     const sq: u6 = @intCast(@ctz(bb));
     const enemyAtt = getSideAtt(~@intFromEnum(side), (team | enemy));
     const m = board.getKingMoves(sq) & (~team & ~enemyAtt);
-    const castleMask: u64 = @as(u64, 0x6e) << ((sq >> 3) * 8);
+    const kingSideCastleMask: u64 = @as(u64, 0x60) << ((sq >> 3) * 8);
+    const queenSideCastleMask: u64 = @as(u64, 0xe) << ((sq >> 3) * 8);
+    const occ = (team | enemy);
 
     const castleRights: u2 = @intCast((board.castleRights >> (@as(u2, @intFromBool(side == board.side.black)) << 1)) & 0x3);
-
-    const canCastle = !((castleMask & (team | enemy)) > 0) and !((bb & enemy) > 0) and (castleRights > 0);
-
-    _ = canCastle;
+    //std.info.log("{}, {}, {}\n", .{!(castleMask & (team | enemy) > 0), !((bb & enemyAtt) > 0), castleRights > 0});
+    const canCastle = ((kingSideCastleMask & occ) == 0 or (queenSideCastleMask & occ) == 0)
+                            and ((bb & enemyAtt) == 0) and (castleRights > 0);
 
     var captureMoves = m & enemy; 
     var quietMoves = m ^ captureMoves;
@@ -222,6 +223,35 @@ fn generateKingMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: boa
 
     const colorCaptureBB: u4 = (@intFromEnum(board.pieceBB.black) & whiteToPlay) + 
                                (@intFromEnum(board.pieceBB.white) & ~whiteToPlay);
+
+    if(canCastle){
+        const kingSideCastle = (castleRights & 0x1) > 0 and (kingSideCastleMask & occ) == 0 and (kingSideCastleMask & enemyAtt) == 0;
+        const queenSideCastle = (castleRights & 0x2) > 0 and (queenSideCastleMask & occ) == 0 and (queenSideCastleMask & enemyAtt) == 0;
+
+        if(kingSideCastle){
+            moves.moves[moves.count].from = sq;
+            moves.moves[moves.count].to = sq + 2;
+            moves.moves[moves.count].flags = Move.Flags.kingSideCastle;
+            moves.moves[moves.count].pieceBB = pieceBB;
+            moves.moves[moves.count].colorBB = colorBB;
+            moves.moves[moves.count].captureBB = 0;
+            moves.moves[moves.count].colorCaptureBB = 0;
+
+            moves.count += 1;
+        }
+        if(queenSideCastle){
+            moves.moves[moves.count].from = sq;
+            moves.moves[moves.count].to = sq - 2;
+            moves.moves[moves.count].flags = Move.Flags.queenSideCastle;
+            moves.moves[moves.count].pieceBB = pieceBB;
+            moves.moves[moves.count].colorBB = colorBB;
+            moves.moves[moves.count].captureBB = 0;
+            moves.moves[moves.count].colorCaptureBB = 0;
+
+            moves.count += 1; 
+        }
+
+    }
 
     while(quietMoves > 0): (quietMoves &= quietMoves - 1){
         const nsq: u6 = @intCast(@ctz(quietMoves));
@@ -387,32 +417,62 @@ fn generateQueenMoves(moves: *MoveList, bb: u64, team: u64, enemy: u64, side: bo
 }
 
 pub fn makeMove(move: *Move) void{
-
     move.pState.castleRights = board.castleRights;
     move.pState.epSquare = board.enPassant;
 
     const from = @as(u64, 1) << move.from;
     const to = @as(u64, 1) << move.to;
-
     const fromTo = from | to;
-
-    board.bitBoards[move.pieceBB] ^= fromTo;
-    board.bitBoards[move.colorBB] ^= fromTo;
 
     const isDoublePawnPush: u6 = @bitCast(-@as(i6, @intFromBool(move.flags == Move.Flags.doublePawnPush)));
     const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.epCapture)));
-    
-    const offset: i6 = if(board.toPlay == board.side.white) -8 else 8;
-    board.enPassant = (move.to +% @as(u6, @bitCast(offset))) & isDoublePawnPush;
-    const epCaptureSq: u64 = (@as(u64, 1) << (move.to +% @as(u6, @bitCast(offset)))) & isEnPassant;
-
     const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.capture)));
+    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.kingSideCastle)));
+    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.queenSideCastle)));
+    const rookBB: u4 = if(board.toPlay == board.side.white) @intFromEnum(board.pieceBB.wRook)
+                        else  @intFromEnum(board.pieceBB.bRook);
+    const shift: u2 = if(board.toPlay == board.side.white) 0 else 2;
+    const offset: i6 = if(board.toPlay == board.side.white) -8 else 8;
+    const epCaptureSq: u64 = (@as(u64, 1) << (move.to +% @as(u6, @bitCast(offset)))) & isEnPassant;
+    const isKingMove: u4 = if(move.pieceBB == @intFromEnum(board.pieceBB.wKing) or
+                                 move.pieceBB == @intFromEnum(board.pieceBB.bKing))
+                                @bitCast(@as(i4,-1)) else 
+                                0;
+    const rightRook =  ((move.from & 3) == 7 and rookBB == move.pieceBB);
+    const leftRook = (move.from & 3) == 0 and rookBB == move.pieceBB;
+
+    const rookFromTo: u64 = ((fromTo << 1) & isKingSideCastle) | ((from >> 4 | to << 1) & isQueenSideCastle);
+
+    const generalMove = from | (to & ~isCapture) | epCaptureSq | rookFromTo;
+
+    board.bitBoards[move.pieceBB] ^= fromTo;
+    board.bitBoards[rookBB] ^= rookFromTo;
+    board.bitBoards[move.colorBB] ^= fromTo | rookFromTo;
+
+    //std.debug.print("move: {any}\n", .{move});
+
+    //std.debug.print("rookBB {}, fromTO {}\n", .{rookBB, rookFromTo});
+    //std.debug.print("fromTo {}\n", .{fromTo});
+    //std.debug.print("general move{}\n", .{generalMove});
+    //std.debug.print("white Rook {}\n", .{board.bitBoards[3]});
+    //std.debug.print("black Rook {}\n", .{board.bitBoards[9]});
+    
+
+    board.enPassant = (move.to +% @as(u6, @bitCast(offset))) & isDoublePawnPush;
 
     board.bitBoards[move.captureBB] ^= (to & isCapture) | epCaptureSq;
     board.bitBoards[move.colorCaptureBB] ^= (to & isCapture) | epCaptureSq;
 
-    board.empty ^= from | (to & ~isCapture) | epCaptureSq;
-    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= from | (to & ~isCapture) | epCaptureSq;
+    board.castleRights &= ~((@as(u4, 0x3) << shift) & isKingMove);
+
+    if(rightRook){
+        board.castleRights &= ~(@as(u4, 1) << (@as(u2, ~@intFromEnum(board.toPlay)) << 1));
+    }else if(leftRook){
+        board.castleRights &= ~(@as(u4, 2) << (@as(u2, ~@intFromEnum(board.toPlay)) << 1));
+    }
+
+    board.empty ^= generalMove;
+    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= generalMove;
 
     board.toPlay = if (board.toPlay == board.side.white) board.side.black else board.side.white;
 }
@@ -420,26 +480,35 @@ pub fn makeMove(move: *Move) void{
 pub fn unMakeMove(move: Move) void{
     board.enPassant = move.pState.epSquare;
     board.castleRights = move.pState.castleRights;
+    
     const from = @as(u64, 1) << move.from;
     const to = @as(u64, 1) << move.to;
 
     const fromTo = from | to;
 
-    board.bitBoards[move.pieceBB] ^= fromTo;
-    board.bitBoards[move.colorBB] ^= fromTo;
-    
     const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.capture)));
     const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.epCapture)));
     const offset: i6 = if(board.toPlay == board.side.white) 8 else -8;
     const epSquare = (@as(u64, 1) << (move.to +% @as(u6, @bitCast(offset)))) & isEnPassant;
+    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.kingSideCastle)));
+    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.queenSideCastle)));
+    board.toPlay = if (board.toPlay == board.side.white) board.side.black else board.side.white;
+    const rookBB: u4 = if(board.toPlay == board.side.white) @intFromEnum(board.pieceBB.wRook)
+                            else  @intFromEnum(board.pieceBB.bRook);
+    
+    const rookFromTo: u64 = ((fromTo << 1) & isKingSideCastle) | ((from >> 4 | to << 1) & isQueenSideCastle);
 
+    const generalMove = (from | (to & ~isCapture)) | epSquare | rookFromTo;
+
+    board.bitBoards[move.pieceBB] ^= fromTo;
+    board.bitBoards[rookBB] ^= rookFromTo;
+    board.bitBoards[move.colorBB] ^= fromTo | rookFromTo;
+    
     board.bitBoards[move.captureBB] ^= (to & isCapture) | epSquare;
     board.bitBoards[move.colorCaptureBB] ^= (to & isCapture) | epSquare;
-    board.empty ^= (from | (to & ~isCapture)) | epSquare; 
 
-    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= (from | (to & ~isCapture)) | epSquare;
-
-    board.toPlay = if (board.toPlay == board.side.white) board.side.black else board.side.white;
+    board.empty ^= generalMove; 
+    board.bitBoards[@intFromEnum(board.pieceBB.all)] ^= generalMove;
 }
 
 fn getSideAtt(side: u1, occ: u64) u64{
@@ -497,15 +566,14 @@ inline fn isSquareAttacked(sq: u64, enemySide: board.side, occ: u64) bool{
 }
 
 pub fn perftDivide(depth: u32) void{
-    const moves = generateLegalMoves();
+    var moves = generateLegalMoves();
     var tot: u64 = 0;
 
     for(0..moves.count) |i|{
         makeMove(&moves.moves[i]);
         const p = perft(depth - 1);
-        std.debug.print("{s}{s}, {} {}: {}\n", .{
+        std.debug.print("{s}{s}: {}\n", .{
             board.getSquareChar(moves.moves[i].from), board.getSquareChar(moves.moves[i].to), 
-            moves.moves[i].from, moves.moves[i].to,
             p 
         });
         tot += p;
@@ -521,6 +589,10 @@ pub fn perft(depth: u32) u64{
     if(depth == 0){
         return @as(u64, 1);
     }else if(depth == 1){
+       //std.debug.print("0x{x}\n", .{board.bitBoards[14]});
+        //for(0..moves.count) |i|{
+        //    std.debug.print("from {s}, to {s}\n", .{board.getSquareChar(moves.moves[i].from), board.getSquareChar(moves.moves[i].to)});
+        //}
         return moves.count;
     }
 

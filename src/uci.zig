@@ -108,7 +108,7 @@ fn parseFen(fen: []const u8) void{
 }
  
 fn parseMove(args: []const u8) void{
-    const moves = m.generateLegalMoves();
+    var moves = m.generateLegalMoves();
     std.debug.print("{s}\n", .{args});
     const fileFrom: u10 = args[0] - 'a';
     const rankFrom: u10 = args[1] - '1';
@@ -119,11 +119,11 @@ fn parseMove(args: []const u8) void{
     const to: u10 = rankTo * 8 + fileTo;
 
     for(0..moves.count) |i|{
-        std.debug.print("{any}\n", .{moves.moves[i]});
+        //std.debug.print("{any}\n", .{moves.moves[i]});
         if(from == moves.moves[i].from and to == moves.moves[i].to){
             //std.debug.print("move found!\n", .{});
             //std.debug.print("{}, {}\n", .{from, to});
-            m.makeMove(moves.moves[i]);
+            m.makeMove(&moves.moves[i]);
             break;
         }
     }

@@ -16,8 +16,9 @@ pub fn main() !void {
 
         std.debug.print("peft depth {}: nodes {}, time {}s\n", .{i, res, @as(f64, @floatFromInt(end - start)) / @as(f64, 1000000000)});
     }
-    //std.debug.print("{}\n", .{moves.perft(4)});
-    //std.debug.print("{}\n", .{moves.perftDivide(7)});
+    //std.debug.print("{}\n", .{moves.perft(7)});
+    //moves.perftDivide(7);
+    //std.debug.print("{}\n", .{board.bitBoards[14]});
 }
 
 test "rookMagic" {
