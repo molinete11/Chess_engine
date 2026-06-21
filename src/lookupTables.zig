@@ -1,14 +1,5 @@
 const std = @import("std");
-
-pub var bitBoards: [15]u64 = undefined;
-
-pub var toPlay: side = undefined;
-
-pub var castleRights: u4 = undefined; 
-
-pub var empty: u64 = 0;
-
-pub var enPassant: u6 = 0;
+const Board = @import("board.zig");
 
 pub const side = enum(u1) {
     white,
@@ -100,17 +91,6 @@ pub const squares = enum(u8) {
     h8,
 };
 
-pub const squaresChar: [64][2]u8 = [64][2]u8{
-    [2]u8{ 'a', '1' }, [2]u8{ 'b', '1' }, [2]u8{ 'c', '1' }, [2]u8{ 'd', '1' }, [2]u8{ 'e', '1' }, [2]u8{ 'f', '1' }, [2]u8{ 'g', '1' }, [2]u8{ 'h', '1' },
-    [2]u8{ 'a', '2' }, [2]u8{ 'b', '2' }, [2]u8{ 'c', '2' }, [2]u8{ 'd', '2' }, [2]u8{ 'e', '2' }, [2]u8{ 'f', '2' }, [2]u8{ 'g', '2' }, [2]u8{ 'h', '2' },
-    [2]u8{ 'a', '3' }, [2]u8{ 'b', '3' }, [2]u8{ 'c', '3' }, [2]u8{ 'd', '3' }, [2]u8{ 'e', '3' }, [2]u8{ 'f', '3' }, [2]u8{ 'g', '3' }, [2]u8{ 'h', '3' },
-    [2]u8{ 'a', '4' }, [2]u8{ 'b', '4' }, [2]u8{ 'c', '4' }, [2]u8{ 'd', '4' }, [2]u8{ 'e', '4' }, [2]u8{ 'f', '4' }, [2]u8{ 'g', '4' }, [2]u8{ 'h', '4' },
-    [2]u8{ 'a', '5' }, [2]u8{ 'b', '5' }, [2]u8{ 'c', '5' }, [2]u8{ 'd', '5' }, [2]u8{ 'e', '5' }, [2]u8{ 'f', '5' }, [2]u8{ 'g', '5' }, [2]u8{ 'h', '5' },
-    [2]u8{ 'a', '6' }, [2]u8{ 'b', '6' }, [2]u8{ 'c', '6' }, [2]u8{ 'd', '6' }, [2]u8{ 'e', '6' }, [2]u8{ 'f', '6' }, [2]u8{ 'g', '6' }, [2]u8{ 'h', '6' },
-    [2]u8{ 'a', '7' }, [2]u8{ 'b', '7' }, [2]u8{ 'c', '7' }, [2]u8{ 'd', '7' }, [2]u8{ 'e', '7' }, [2]u8{ 'f', '7' }, [2]u8{ 'g', '7' }, [2]u8{ 'h', '7' },
-    [2]u8{ 'a', '8' }, [2]u8{ 'b', '8' }, [2]u8{ 'c', '8' }, [2]u8{ 'd', '8' }, [2]u8{ 'e', '8' }, [2]u8{ 'f', '8' }, [2]u8{ 'g', '8' }, [2]u8{ 'h', '8' },
-};
-
 const mDiagonalShifts: [64]i8 = [_]i8{
     0, -1, -2, -3, -4, -5, -6, -7,
     1, 0,  -1, -2, -3, -4, -5, -6,
@@ -132,24 +112,6 @@ const aDiagonalShifts: [64]i8 = [_]i8{
     -1, 0,  1,  2,  3,  4,  5,  6,
     0,  1,  2,  3,  4,  5,  6,  7,
 };
-
-pub const notAFile: u64 = 0xfefefefefefefefe;
-pub const notHFile: u64 = 0x7f7f7f7f7f7f7f7f;
-pub const notABFile: u64 = 0xfcfcfcfcfcfcfcfc;
-pub const notHGFile: u64 = 0x3f3f3f3f3f3f3f3f;
-pub const aFile: u64 = 0x0101010101010101;
-pub const bFile: u64 = 0x202020202020202;
-pub const rank1: u64 = 0x00000000000000FF;
-pub const rank2: u64 = 0x000000000000FF00;
-pub const rank3: u64 = 0x0000000000FF0000;
-pub const rank4: u64 = 0x00000000FF000000;
-pub const rank5: u64 = 0x000000FF00000000;
-pub const rank6: u64 = 0x0000FF0000000000;
-pub const rank7: u64 = 0x00FF000000000000;
-pub const rank8: u64 = 0xFF00000000000000;
-
-const mDiagonal: u64 = 0x8040201008040201;
-const aDiagonal: u64 = 0x102040810204080;
 
 const pawnLookUpTable: [2][64]u64 = initPawnLookUpTable();
 const pawnAttLookUpTAble: [2][64]u64 = initPawnAttacksLookUpTable();
@@ -460,19 +422,19 @@ fn createBishopMask() [64]u64 {
         masks[i] = 0;
 
         if (mDiagonalShifts[i] >= 0) {
-            masks[i] |= mDiagonal << @intCast(8 * mDiagonalShifts[i]);
+            masks[i] |= Board.mDiagonal << @intCast(8 * mDiagonalShifts[i]);
         } else if (mDiagonalShifts[i] < 0) {
-            masks[i] |= mDiagonal >> @intCast(8 * (-mDiagonalShifts[i]));
+            masks[i] |= Board.mDiagonal >> @intCast(8 * (-mDiagonalShifts[i]));
         }
 
         if (aDiagonalShifts[i] >= 0) {
-            masks[i] |= aDiagonal << @intCast(8 * aDiagonalShifts[i]);
+            masks[i] |= Board.aDiagonal << @intCast(8 * aDiagonalShifts[i]);
         } else if (aDiagonalShifts[i] < 0) {
-            masks[i] |= aDiagonal >> @intCast(8 * (-aDiagonalShifts[i]));
+            masks[i] |= Board.aDiagonal >> @intCast(8 * (-aDiagonalShifts[i]));
         }
 
         masks[i] ^= @as(u64, 1) << @intCast(i);
-        masks[i] &= notAFile & notHFile & (~rank1 & ~rank8);
+        masks[i] &= Board.notAFile & Board.notHFile & (~Board.rank1 & ~Board.rank8);
         i += 1;
     }
 
@@ -484,7 +446,7 @@ fn createRookMask() [64]u64 {
     for (0..64) |i| {
         const rank: u3 = @intCast(i >> 3);
         const file: u3 = @intCast(i & 7);
-        const mask: u64 = (((rank1 << (@as(u6, rank) * 8)) & (notAFile & notHFile)) | ((aFile << file) & ~(rank1 | rank8)));
+        const mask: u64 = (((Board.rank1 << (@as(u6, rank) * 8)) & (Board.notAFile & Board.notHFile)) | ((Board.aFile << file) & ~(Board.rank1 | Board.rank8)));
         masks[i] = mask & (mask ^ (@as(u64, 1) << @intCast(i)));
     }
     return masks;
@@ -494,8 +456,8 @@ fn initPawnLookUpTable() [2][64]u64 {
     var moves: [2][64]u64 = undefined;
     for (0..64) |i| {
         const pos: u64 = @as(u64, 1) << @intCast(i);
-        moves[0][i] = (pos << 8) | ((pos & rank2) << 16); // WHITE
-        moves[1][i] = (pos >> 8) | ((pos & rank7) >> 16); // BLACK
+        moves[0][i] = (pos << 8) | ((pos & Board.rank2) << 16); // WHITE
+        moves[1][i] = (pos >> 8) | ((pos & Board.rank7) >> 16); // BLACK
     }
     return moves;
 }
@@ -504,14 +466,14 @@ fn initKnightLookUpTable() [64]u64 {
     var masks: [64]u64 = undefined;
     for (0..64) |i| {
         const pos: u64 = @as(u64, 1) << @intCast(i);
-        masks[i] = ((pos << 17) & notAFile) |
-            ((pos << 15) & notHFile) |
-            ((pos << 10) & notABFile) |
-            ((pos << 6) & notHGFile) |
-            ((pos >> 10) & notHGFile) |
-            ((pos >> 17) & notHFile) |
-            ((pos >> 15) & notAFile) |
-            ((pos >> 6) & notABFile);
+        masks[i] = ((pos << 17) & Board.notAFile) |
+            ((pos << 15) & Board.notHFile) |
+            ((pos << 10) & Board.notABFile) |
+            ((pos << 6) & Board.notHGFile) |
+            ((pos >> 10) & Board.notHGFile) |
+            ((pos >> 17) & Board.notHFile) |
+            ((pos >> 15) & Board.notAFile) |
+            ((pos >> 6) & Board.notABFile);
     }
     return masks;
 }
@@ -520,8 +482,8 @@ fn initPawnAttacksLookUpTable() [2][64]u64 {
     var att: [2][64]u64 = undefined;
     for (0..64) |i| {
         const pos: u64 = @as(u64, 1) << @intCast(i);
-        att[0][i] = (pos << 9 & notAFile) | (pos << 7 & notHFile); // WHITE
-        att[1][i] = (pos >> 7 & notAFile) | (pos >> 9 & notHFile); // BLACK
+        att[0][i] = (pos << 9 & Board.notAFile) | (pos << 7 & Board.notHFile); // WHITE
+        att[1][i] = (pos >> 7 & Board.notAFile) | (pos >> 9 & Board.notHFile); // BLACK
     }
     return att;
 }
@@ -530,7 +492,7 @@ fn initKingLookUpTable() [64]u64 {
     var masks: [64]u64 = undefined;
     for (0..64) |i| {
         const pos: u64 = @as(u64, 1) << @intCast(i);
-        const sides: u64 = ((pos << 1) & notAFile) | ((pos >> 1) & notHFile);
+        const sides: u64 = ((pos << 1) & Board.notAFile) | ((pos >> 1) & Board.notHFile);
         masks[i] = ((sides | pos) << 8) | ((sides | pos) >> 8) | sides;
     }
     return masks;
@@ -598,15 +560,15 @@ fn initRookMoves() [64][4096]u64 {
 pub inline fn getBishopMask(sq: u6) u64 {
     var mask: u64 = 0;
     if (mDiagonalShifts[sq] >= 0) {
-        mask |= mDiagonal << @intCast(8 * mDiagonalShifts[sq]);
+        mask |= Board.mDiagonal << @intCast(8 * mDiagonalShifts[sq]);
     } else if (mDiagonalShifts[sq] < 0) {
-        mask |= mDiagonal >> @intCast(8 * (-mDiagonalShifts[sq]));
+        mask |= Board.mDiagonal >> @intCast(8 * (-mDiagonalShifts[sq]));
     }
 
     if (aDiagonalShifts[sq] >= 0) {
-        mask |= aDiagonal << @intCast(8 * aDiagonalShifts[sq]);
+        mask |= Board.aDiagonal << @intCast(8 * aDiagonalShifts[sq]);
     } else if (aDiagonalShifts[sq] < 0) {
-        mask |= aDiagonal >> @intCast(8 * (-aDiagonalShifts[sq]));
+        mask |= Board.aDiagonal >> @intCast(8 * (-aDiagonalShifts[sq]));
     }
 
     mask ^= @as(u64, 1) << sq;
@@ -617,7 +579,7 @@ pub inline fn getBishopMask(sq: u6) u64 {
 pub inline fn getRookMask(sq: u6) u64 {
     const rank: u3 = @intCast(sq >> 3);
     const file: u3 = @intCast(sq & 7);
-    const mask: u64 = (rank1 << (@as(u6, rank) * 8)) | (aFile << file);
+    const mask: u64 = (Board.rank1 << (@as(u6, rank) * 8)) | (Board.aFile << file);
     return mask ^ (@as(u64, 1) << sq);
 }
 
@@ -655,120 +617,7 @@ pub inline fn getQueenMoves(sq: u8, occ: u64) u64 {
     return getBishopMoves(sq, occ) | getRookMoves(sq, occ);
 }
 
-pub fn getPieceBB(sq: u8) u4 {
-    const pos = @as(u64, 1) << @intCast(sq);
 
-    const wPawn: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[0] & pos) > 0)));
-    const wBishop: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[1] & pos) > 0)));
-    const wKnight: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[2] & pos) > 0)));
-    const wRook: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[3] & pos) > 0)));
-    const wQueen: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[4] & pos) > 0)));
-    const wKing: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[5] & pos) > 0)));
-
-    const bPawn: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[6] & pos) > 0)));
-    const bBishop: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[7] & pos) > 0)));
-    const bKnight: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[8] & pos) > 0)));
-    const bRook: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[9] & pos) > 0)));
-    const bQueen: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[10] & pos) > 0)));
-    const bKing: u4 = @bitCast(-@as(i4, @intFromBool((bitBoards[11] & pos) > 0)));
-
-    return (@intFromEnum(pieceBB.wPawn) & wPawn) +
-        (@intFromEnum(pieceBB.wBishop) & wBishop) +
-        (@intFromEnum(pieceBB.wKnight) & wKnight) +
-        (@intFromEnum(pieceBB.wRook) & wRook) +
-        (@intFromEnum(pieceBB.wQueen) & wQueen) +
-        (@intFromEnum(pieceBB.wKing) & wKing) +
-        (@intFromEnum(pieceBB.bPawn) & bPawn) +
-        (@intFromEnum(pieceBB.bBishop) & bBishop) +
-        (@intFromEnum(pieceBB.bKnight) & bKnight) +
-        (@intFromEnum(pieceBB.bRook) & bRook) +
-        (@intFromEnum(pieceBB.bQueen) & bQueen) +
-        (@intFromEnum(pieceBB.bKing) & bKing);
-}
-
-pub fn clearBoard() void {
-    castleRights = 0;
-
-    bitBoards[@intFromEnum(pieceBB.wPawn)] = 0;
-    bitBoards[@intFromEnum(pieceBB.wBishop)] = 0;
-    bitBoards[@intFromEnum(pieceBB.wKnight)] = 0;
-    bitBoards[@intFromEnum(pieceBB.wRook)] = 0;
-    bitBoards[@intFromEnum(pieceBB.wQueen)] = 0;
-    bitBoards[@intFromEnum(pieceBB.wKing)] = 0;
-
-    bitBoards[@intFromEnum(pieceBB.bPawn)] = 0;
-    bitBoards[@intFromEnum(pieceBB.bBishop)] = 0;
-    bitBoards[@intFromEnum(pieceBB.bKnight)] = 0;
-    bitBoards[@intFromEnum(pieceBB.bRook)] = 0;
-    bitBoards[@intFromEnum(pieceBB.bQueen)] = 0;
-    bitBoards[@intFromEnum(pieceBB.bKing)] = 0;
-
-    bitBoards[@intFromEnum(pieceBB.black)] = 0;
-    bitBoards[@intFromEnum(pieceBB.white)] = 0;
-    bitBoards[@intFromEnum(pieceBB.all)] = 0;
-
-    empty = ~bitBoards[@intFromEnum(pieceBB.all)];
-}
-
-pub fn getSquareChar(sq: u6) *const [2]u8 {
-    return &squaresChar[sq];
-}
-
-pub fn getAttackSet(color: u1, occ: u64) u64 {
-    const start: u4 = 6 * @as(u4, @intFromBool(color == @intFromEnum(side.black)));
-    const end: u4 = 6 + (6 * @as(u4, @intFromBool(color == @intFromEnum(side.black))));
-
-    var attackSet: u64 = 0;
-
-    const pieces = bitBoards[start..end];
-
-    const whiteToPlay: u64 = @bitCast(-@as(i64, @intFromBool(color == @intFromEnum(side.white))));
-    const pawnAttacks: u64 = (((pieces[0] << 7 & notHFile) | (pieces[0] << 9 & notAFile)) & whiteToPlay) +
-        (((pieces[0] >> 9 & notHFile) | (pieces[0] >> 7 & notAFile)) & ~whiteToPlay);
-
-    attackSet |= pawnAttacks;
-    attackSet |= getKingMoves(@intCast(@ctz(pieces[5])));
-
-    var bishops: u64 = pieces[1];
-    while (bishops > 0) : (bishops &= bishops - 1) {
-        attackSet |= getBishopMoves(@intCast(@ctz(bishops)), occ);
-    }
-
-    var knights: u64 = pieces[2];
-    while (knights > 0) : (knights &= knights - 1) {
-        attackSet |= getKnightMoves(@intCast(@ctz(knights)));
-    }
-
-    var rooks: u64 = pieces[3];
-    while (rooks > 0) : (rooks &= rooks - 1) {
-        attackSet |= getRookMoves(@intCast(@ctz(rooks)), occ);
-    }
-
-    var queens: u64 = pieces[4];
-    while (queens > 0) : (queens &= queens - 1) {
-        attackSet |= getQueenMoves(@intCast(@ctz(queens)), occ);
-    }
-
-    return attackSet;
-}
-
-pub inline fn isSquareAttacked(sq: u64, color: side, occ: u64) bool {
-    const blackToPlay: u4 = @intFromBool(color == side.black);
-    const start: u4 = 6 * blackToPlay;
-    const end: u4 = 6 + 6 * blackToPlay;
-
-    const pieces = bitBoards[start..end];
-
-    const sqIdx: u6 = @intCast(@ctz(sq));
-
-    const rqattackers: u64 = getRookMoves(sqIdx, occ) & (pieces[3] | pieces[4]);
-    const bqattackers: u64 = getBishopMoves(sqIdx, occ) & (pieces[1] | pieces[4]);
-    const pwattackers: u64 = getPawnAtt(sqIdx, @intFromEnum(color) ^ @as(u1, 1)) & pieces[0];
-    const nattackers: u64 = getKnightMoves(sqIdx) & pieces[2];
-    const kattackers: u64 = getKingMoves(sqIdx) & pieces[5];
-
-    return (rqattackers | bqattackers | pwattackers | nattackers | kattackers) > 0;
-}
 
 
 test "rookMagic" {
