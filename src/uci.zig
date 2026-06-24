@@ -2,6 +2,7 @@ const search = @import("search.zig");
 const std = @import("std");
 const benchmark = @import("benchmark.zig");
 const Board = @import("board.zig");
+const Move = @import("move.zig");
 const perft = @import("perft.zig");
 const mem = std.mem;
 const BitboardIdx = Board.PieceBitboardIdx;
@@ -162,15 +163,16 @@ fn parseGo(self: *Self, args: []const u8) !void{
     }
     
     tokens.reset();
+
     var depth: u32 = default_search_depth;
 
-    const wtime: u32 = 0;
+    var wtime: i32 = 120000;
 
-    const btime: u32 = 0;
+    var btime: i32 = 120000;
 
-    const winc: u32 = 0;
+    const winc: i32 = 0;
 
-    const binc: u32 = 0;
+    const binc: i32 = 0;
 
     const movetime: u32 = 0;
 
@@ -178,24 +180,45 @@ fn parseGo(self: *Self, args: []const u8) !void{
     // TODO: detect extra go arguments
 
     while(tokens.next()) |arg|{
+        
         if(mem.eql(u8, arg, "depth")){
             if(tokens.next()) |d|{
                 depth = std.fmt.parseInt(u32, d, 10) catch unreachable;
             }
         }
+        if(mem.eql(u8, args, "wtime")){
+            if(tokens.next()) |wt|{
+
+                wtime = std.fmt.parseInt(i32, wt, 10) catch unreachable;
+    
+            }
+        }
+        if(mem.eql(u8, args, "btime")){
+            if(tokens.next()) |bt|{
+
+                btime = std.fmt.parseInt(i32, bt, 10) catch unreachable;
+
+            }            
+        }
     }
 
-    if(search.getBestMove(&self.board, 
+    std.debug.print("depth {}\n", .{depth});
+    std.debug.print("wtime {}\n", .{wtime});
+    std.debug.print("btime {}\n", .{btime});
+
+    //std.debug.print("search info wtime {} btime {}\n", .{wtime, btime});
+
+    const move = search.getBestMove(self.io,
+                        &self.board, 
                         depth, 
                         wtime, 
                         btime, 
                         winc, 
                         binc, 
-                        movetime)) 
-                        |move|
-    {
-        try self.writer.print("bestmove {s}\n", .{moveToUcimove(move)});
-    }
+                        movetime); 
+    
+    try self.writer.print("bestmove {s}\n", .{move});
+                        
 }
 
 fn parseMove(self: *Self, args: []const u8) void{
@@ -335,8 +358,8 @@ fn getToken(buffer: []const u8, idx: usize) Loc{
     
 }
 
-pub fn moveToUcimove(move: Board.Move) []u8{
-    var buffer: [8]u8 = undefined;
+pub fn moveToUcimove(move: Move) []u8{
+    var buffer: [1024]u8 = @splat(0);
 
     if(@intFromEnum(move.flags) >= 6){
 

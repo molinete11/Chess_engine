@@ -1,6 +1,8 @@
 const std = @import("std");
 const lookup_tables = @import("lookupTables.zig");
 const bit_set = @import("bitSet.zig");
+const Move = @import("move.zig");
+const MoveList = @import("moveList.zig");
 
 const Self = @This();
 
@@ -27,69 +29,13 @@ pub const PieceBitboardIdx = enum(u4) {
     all,
 };
 
-pub const Move = struct {
-    pieceBB: u4,
-    colorBB: u4,
-    captureBB: u4,
-    colorCaptureBB: u4,
+const PieceStoreMoveInfo = struct {
+    legalSquares: u64,
+    legalCaptures: u64,
     from: u6,
-    to: u6,
-    pState: PreviousState,
-    flags: Flags,
-
-    const PreviousState = struct{
-        epSquare: u6,
-        castleRights: u4,
-        board_flags: BoardFlags,
-    };
-
-    pub const Flags = enum(u4){
-        quietMove,
-        doublePawnPush,
-        kingSideCastle,
-        queenSideCastle,
-        capture,
-        epCapture,
-        bishopPromotion,
-        knightPromotion,
-        rookPromotion,
-        queenPromotion,
-        bishopPromotionCapture,
-        knightPromotionCapture,
-        rookPromotionCapture,
-        queenPromotionCapture
-    };
-};
-
-pub const MoveList = struct {
-    moves: [218]Move,
-    count: u8,
-    
-    const PieceStoreMoveInfo = struct {
-        legalSquares: u64,
-        legalCaptures: u64,
-        from: u6,
-        currentPieceBB: u4,
-        colorToPlayBB: u4,
-        enemyColorBB: u4,
-    };
-
-    pub inline fn add(self: *MoveList, 
-                            from: u6, to: u6, 
-                            flags: Move.Flags, 
-                            colorBB: u4, 
-                            pieceBB: u4, 
-                            colorCaptureBB: u4,
-                            capturePieceBB: u4) void{
-        self.moves[self.count].from = from;
-        self.moves[self.count].to = to;
-        self.moves[self.count].flags = flags;
-        self.moves[self.count].colorBB = colorBB;
-        self.moves[self.count].pieceBB = pieceBB;
-        self.moves[self.count].colorCaptureBB = colorCaptureBB;
-        self.moves[self.count].captureBB = capturePieceBB;
-        self.count += 1;
-    }
+    currentPieceBB: u4,
+    colorToPlayBB: u4,
+    enemyColorBB: u4,
 };
 
 const MoveSetList = struct {
@@ -110,7 +56,7 @@ const FenError = error{
     InvalidFen,
 };
 
-const BoardFlags = enum{
+pub const BoardFlags = enum{
     none,
     checkmate,
     stealmate,
@@ -239,7 +185,7 @@ pub fn setPos(self: *Self, fen: []const u8) !void{
             'Q' => {self.castle_rights ^= 0x2;},
             'k' => {self.castle_rights ^= 0x4;},
             'q' => {self.castle_rights ^= 0x8;},
-            else => {return FenError.InvalidFen;},
+            else => {},
         }
     }
 
@@ -262,12 +208,11 @@ pub fn restartPos(self: *Self) void{
     self.setPos(default_fen) catch unreachable;
 }
 
-
-pub fn isCheckMate(self: *Self) bool{
+pub inline fn isCheckMate(self: *Self) bool{
     return self.flags == .checkmate;
 }
 
-pub fn isDraw(self: *Self) bool{
+pub inline fn isDraw(self: *Self) bool{
     return self.flags == .stealmate;
 }
 
@@ -279,7 +224,7 @@ pub fn getFen(self: *Self) []u8{
     return fen;
 }
 
-fn clearBoard(self: *Self) void{
+inline fn clearBoard(self: *Self) void{
     self.bitboards = @splat(0);
     self.castle_rights = 0;
     self.empty = 0;
@@ -297,18 +242,18 @@ pub fn makeMove(self: *Self, move: *Move) void{
     const to = @as(u64, 1) << move.to;
     const fromTo = from | to;
 
-    const isDoublePawnPush: u6 = @bitCast(-@as(i6, @intFromBool(move.flags == Move.Flags.doublePawnPush)));
-    const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.epCapture)));
-    const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.capture or @intFromEnum(move.flags) >= 10)));
-    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.kingSideCastle)));
-    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.queenSideCastle)));
-    const rookBB: u4 = if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.wRook)
+    const isDoublePawnPush: u6 = @bitCast(-@as(i6, @intFromBool(move.isDoublePawnPush())));
+    const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.isEnPassantCapture())));
+    const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.isCapture())));
+    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.isKingSideCastle())));
+    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.isQueenSideCastle())));
+    const rookBB: u4 = if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.wRook)
                         else  @intFromEnum(PieceBitboardIdx.bRook);
-    const enemyRookBB: u4 = if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.bRook)
+    const enemyRookBB: u4 = if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.bRook)
                             else  @intFromEnum(PieceBitboardIdx.wRook);
 
-    const shift: u2 = if(self.to_play == .white) 0 else 2;
-    const offset: i6 = if(self.to_play == .white) -8 else 8;
+    const shift: u2 = if(self.isWhiteToPlay()) 0 else 2;
+    const offset: i6 = if(self.isWhiteToPlay()) -8 else 8;
     const epCaptureSq: u64 = (@as(u64, 1) << (move.to +% @as(u6, @bitCast(offset)))) & isEnPassant;
     const isKingMove: u4 = if(move.pieceBB == @intFromEnum(PieceBitboardIdx.wKing) or
                                  move.pieceBB == @intFromEnum(PieceBitboardIdx.bKing))
@@ -335,22 +280,21 @@ pub fn makeMove(self: *Self, move: *Move) void{
     const enemyLeftRook: bool =     ((@as(u64, 0x1) << (56 * @as(u6, ~@intFromEnum(self.to_play)))) & self.bitboards[enemyRookBB]) == 0;
     const enemyRightRook: bool =    ((@as(u64, 0x80) << (56 * @as(u6, ~@intFromEnum(self.to_play)))) & self.bitboards[enemyRookBB]) == 0;
 
-    if(@intFromEnum(move.flags) >= 6) {
+    if(move.isPromotion()) {
         self.bitboards[move.pieceBB] ^= to;
 
         var idx: u4 = 0;
         const pieceBBTarget: u4 = @intFromEnum(PieceBitboardIdx.wBishop) + (6 * @as(u4, @intFromEnum(self.to_play)));
 
-        idx += @intFromBool(move.flags == .knightPromotion or 
-                            move.flags == .knightPromotionCapture);
+        idx += @intFromBool(move.isKnightPromotion() or 
+                            move.isKnightPromotionCapture());
         
-        idx += @as(u4, @intFromBool(move.flags == .rookPromotion or 
-                            move.flags == .rookPromotionCapture)) * 2;
+        idx += @as(u4, @intFromBool(move.isRookPromotion() or 
+                            move.isRookPromotionCapture())) * 2;
         
-        idx += @as(u4, @intFromBool(move.flags == .queenPromotion or 
-                    move.flags == .queenPromotionCapture)) * 3;
+        idx += @as(u4, @intFromBool(move.isQueenPromotion() or 
+                            move.isQueenPromotionCapture())) * 3;
 
-        
         self.bitboards[pieceBBTarget + idx] ^= to;
     }
 
@@ -384,34 +328,34 @@ pub fn unmakeMove(self: *Self, move: Move) void{
 
     const fromTo = from | to;
 
-    const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.capture or @intFromEnum(move.flags) >= 10)));
-    const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.epCapture)));
-    const offset: i6 = if(self.to_play == .white) 8 else -8;
+    const isCapture: u64 = @bitCast(-@as(i64, @intFromBool(move.isCapture())));
+    const isEnPassant: u64 = @bitCast(-@as(i64, @intFromBool(move.isEnPassantCapture())));
+    const offset: i6 = if(self.isWhiteToPlay()) 8 else -8;
     const epSquare = (@as(u64, 1) << (move.to +% @as(u6, @bitCast(offset)))) & isEnPassant;
-    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.kingSideCastle)));
-    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.flags == Move.Flags.queenSideCastle)));
-    self.to_play = if (self.to_play == .white) .black else .white;
-    const rookBB: u4 = if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.wRook)
+    const isKingSideCastle: u64 =  @bitCast(-@as(i64, @intFromBool(move.isKingSideCastle())));
+    const isQueenSideCastle: u64 = @bitCast(-@as(i64, @intFromBool(move.isQueenSideCastle())));
+    self.to_play = if (self.isWhiteToPlay()) .black else .white;
+    const rookBB: u4 = if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.wRook)
                             else  @intFromEnum(PieceBitboardIdx.bRook);
     
     const rookFromTo: u64 = ((fromTo << 1) & isKingSideCastle) | ((from >> 4 | to << 1) & isQueenSideCastle);
 
     const generalMove = (from | (to & ~isCapture)) | epSquare | rookFromTo;
 
-   if(@intFromEnum(move.flags) >= 6) {
+   if(move.isPromotion()) {
         self.bitboards[move.pieceBB] ^= to;
 
         var idx: u4 = 0;
         const pieceBBTarget: u4 = @intFromEnum(PieceBitboardIdx.wBishop) + (6 * @as(u4, @intFromEnum(self.to_play)));
 
-        idx += @intFromBool(move.flags == .knightPromotion or 
-                            move.flags == .knightPromotionCapture);
+        idx += @intFromBool(move.isKnightPromotion() or 
+                            move.isKnightPromotionCapture());
         
-        idx += @as(u4, @intFromBool(move.flags == .rookPromotion or 
-                            move.flags == .rookPromotionCapture)) * 2;
+        idx += @as(u4, @intFromBool(move.isRookPromotion() or 
+                            move.isRookPromotionCapture())) * 2;
         
-        idx += @as(u4, @intFromBool(move.flags == .queenPromotion or 
-                    move.flags == .queenPromotionCapture)) * 3;
+        idx += @as(u4, @intFromBool(move.isQueenPromotion() or 
+                    move.isQueenPromotionCapture())) * 3;
 
         
         self.bitboards[pieceBBTarget + idx] ^= to;
@@ -429,7 +373,7 @@ pub fn unmakeMove(self: *Self, move: Move) void{
 }
 
 pub fn generateMoves(self: *Self) MoveList{
-    const blackToPlay: u4 = @bitCast(-@as(i4, @intFromBool(self.to_play == .black)));
+    const blackToPlay: u4 = @bitCast(-@as(i4, @intFromBool(self.isBlackToPlay())));
     const startPieceTeamIdx: u4 = (6 & blackToPlay);
     const endPieceTeamIdx: u4 = 6 + (6 & blackToPlay);
     const startPieceEnemyIdx: u4 = 6 & ~blackToPlay;
@@ -438,8 +382,8 @@ pub fn generateMoves(self: *Self) MoveList{
     const pieces: []u64 = self.bitboards[startPieceTeamIdx..endPieceTeamIdx];
     const king: u64 = pieces[5];
 
-    const colorBB = if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.white) else @intFromEnum(PieceBitboardIdx.black);
-    const colorCaptureBB = if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.black) else @intFromEnum(PieceBitboardIdx.white);
+    const colorBB = if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.white) else @intFromEnum(PieceBitboardIdx.black);
+    const colorCaptureBB = if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.black) else @intFromEnum(PieceBitboardIdx.white);
 
     const enemyPieces: []u64 = self.bitboards[startPieceEnemyIdx..endPieceEnemyIdx];
 
@@ -472,7 +416,7 @@ pub fn generateMoves(self: *Self) MoveList{
     const potentialKnightAttackers: u64 = kgniht_attacks & enemyPieces[2];
     const potentialRookAttackers: u64 = rookRays & (enemyPieces[3] | enemyPieces[4]);
 
-    const whiteToPlay: bool = self.to_play == .white;
+    const whiteToPlay: bool = self.isWhiteToPlay();
 
     const kingBB: u4 = if(whiteToPlay) @intFromEnum(PieceBitboardIdx.wKing) else @intFromEnum(PieceBitboardIdx.bKing);
     const pawnBB: u4 = if(whiteToPlay) @intFromEnum(PieceBitboardIdx.wPawn) else @intFromEnum(PieceBitboardIdx.bPawn);
@@ -481,26 +425,13 @@ pub fn generateMoves(self: *Self) MoveList{
     const rookBB: u4 = if(whiteToPlay) @intFromEnum(PieceBitboardIdx.wRook) else @intFromEnum(PieceBitboardIdx.bRook);
     const queenBB: u4 = if(whiteToPlay) @intFromEnum(PieceBitboardIdx.wQueen) else @intFromEnum(PieceBitboardIdx.bQueen);
 
-    var move_list: MoveList = .{
-            .count = 0,
-            .moves = undefined,
-    };
+    var move_list = MoveList.Init();
 
     if(@popCount(potentialPawnAttackers | potentialBishopAttackers | potentialKnightAttackers | potentialRookAttackers) > 1){
 
         self.storePieceMoves(
             &move_list,
             .{
-            .legalSquares = kingMoves & ~enemy,
-            .legalCaptures = kingMoves & enemy,
-            .from = kingSquare,
-            .currentPieceBB = kingBB,
-            .colorToPlayBB = colorBB,
-            .enemyColorBB = colorCaptureBB,
-        });
-
-        self.storePieceMoves(&move_list, 
-        .{
             .legalSquares = kingMoves & ~enemy,
             .legalCaptures = kingMoves & enemy,
             .from = kingSquare,
@@ -517,7 +448,6 @@ pub fn generateMoves(self: *Self) MoveList{
     }
 
     var potential_pinned_pieces: u64 = rookRays & team;
-
 
     var rqAttackers: u64 = lookup_tables.getRookMask(kingSquare) & (enemyPieces[4] | enemyPieces[3]);
     var pinnedPiecesMask: u64 = 0;
@@ -756,7 +686,7 @@ fn getEnPassantSquare(self: *Self, captureBB: u4, colorCaptureBB: u4, colorBB: u
     return 0;
 }
 
-fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: MoveList.PieceStoreMoveInfo, enPassantSquare: u64, empty: u64) void{
+fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: PieceStoreMoveInfo, enPassantSquare: u64, empty: u64) void{
     var normalPush: u64 = 0;
     var doublePush: u64 = 0;
     var promotions: u64 = 0;
@@ -800,38 +730,44 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
     while(normalPush > 0): (normalPush &= normalPush - 1){
         const sq: u6 = @intCast(@ctz(normalPush));
         moveList.add(
-                sq +% @as(u6, @bitCast(offset)), 
-                sq, 
-                .quietMove, 
-                genInfo.colorToPlayBB, 
-                genInfo.currentPieceBB, 
-                genInfo.enemyColorBB, 
-                0);
+                Move.New(
+                    sq +% @as(u6, @bitCast(offset)), 
+                    sq, 
+                    .quietMove, 
+                    genInfo.colorToPlayBB, 
+                    genInfo.currentPieceBB, 
+                    genInfo.enemyColorBB, 
+                    0)
+                );
     }
 
     while(doublePush > 0): (doublePush &= doublePush - 1){
         const sq: u6 = @intCast(@ctz(doublePush));
         moveList.add(
-                sq +% @as(u6, @bitCast(offset * 2)), 
-                sq, 
-                .doublePawnPush, 
-                genInfo.colorToPlayBB, 
-                genInfo.currentPieceBB, 
-                genInfo.enemyColorBB, 
-                0);
+                Move.New( 
+                    sq +% @as(u6, @bitCast(offset * 2)), 
+                    sq, 
+                    .doublePawnPush, 
+                    genInfo.colorToPlayBB, 
+                    genInfo.currentPieceBB, 
+                    genInfo.enemyColorBB, 
+                    0)
+               );
     }
 
     while(promotions > 0): (promotions &= promotions - 1){
         const sq: u6 = @intCast(@ctz(promotions));
         inline for(0..4) |i|{
             moveList.add(
-                    sq +% @as(u6, @bitCast(offset)), 
-                    sq, 
-                    @enumFromInt(@intFromEnum(Move.Flags.bishopPromotion) + @as(u4, @intCast(i))), 
-                    genInfo.colorToPlayBB, 
-                    genInfo.currentPieceBB, 
-                    genInfo.enemyColorBB, 
-                    0);
+                    Move.New(
+                        sq +% @as(u6, @bitCast(offset)), 
+                        sq, 
+                        @enumFromInt(@intFromEnum(Move.Flags.bishopPromotion) + @as(u4, @intCast(i))), 
+                        genInfo.colorToPlayBB, 
+                        genInfo.currentPieceBB, 
+                        genInfo.enemyColorBB, 
+                        0)
+                    );
         } 
     }
 
@@ -841,13 +777,14 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
         var attackers: u64 = lookup_tables.getPawnAtt(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)) & bitboard;
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){
             moveList.add(
-                    @intCast(@ctz(attackers)), 
-                    sq, 
-                    .capture, 
-                    genInfo.colorToPlayBB, 
-                    genInfo.currentPieceBB, 
-                    genInfo.enemyColorBB, 
-                    capturePieceBB
+                    Move.New(
+                        @intCast(@ctz(attackers)), 
+                        sq, 
+                        .capture, 
+                        genInfo.colorToPlayBB, 
+                        genInfo.currentPieceBB, 
+                        genInfo.enemyColorBB, 
+                        capturePieceBB)
                     );
         }
     }
@@ -857,13 +794,14 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
         var attackers: u64 = lookup_tables.getPawnAtt(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)) & bitboard;
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){
             moveList.add(
-                    @intCast(@ctz(attackers)), 
-                    sq, 
-                    .epCapture, 
-                    genInfo.colorToPlayBB, 
-                    genInfo.currentPieceBB, 
-                    genInfo.enemyColorBB,
-                    if(self.to_play == .white) @intFromEnum(PieceBitboardIdx.bPawn) else @intFromEnum(PieceBitboardIdx.wPawn) 
+                    Move.New( 
+                        @intCast(@ctz(attackers)), 
+                        sq, 
+                        .epCapture, 
+                        genInfo.colorToPlayBB, 
+                        genInfo.currentPieceBB, 
+                        genInfo.enemyColorBB,
+                        if(self.isWhiteToPlay()) @intFromEnum(PieceBitboardIdx.bPawn) else @intFromEnum(PieceBitboardIdx.wPawn))
                     );
         }
     }
@@ -875,18 +813,18 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){            
             inline for(0..4) |i|{
                 moveList.add(
-                        @intCast(@ctz(attackers)), 
-                        sq, 
-                        @enumFromInt(@intFromEnum(Move.Flags.bishopPromotionCapture) + @as(u4, @intCast(i))), 
-                        genInfo.colorToPlayBB, 
-                        genInfo.currentPieceBB, 
-                        genInfo.enemyColorBB,
-                        captureBB
+                        Move.New( 
+                            @intCast(@ctz(attackers)), 
+                            sq, 
+                            @enumFromInt(@intFromEnum(Move.Flags.bishopPromotionCapture) + @as(u4, @intCast(i))), 
+                            genInfo.colorToPlayBB, 
+                            genInfo.currentPieceBB, 
+                            genInfo.enemyColorBB,
+                            captureBB)
                     );
             }
         }
     }
-
 }
 
 fn generateKingCastleMoves(self: *Self, moveList: *MoveList, kingSquare: u6, enemyAttackSet: u64, team: u64, enemy: u64, colorBB: u4, pieceBB: u4) void{
@@ -901,24 +839,28 @@ fn generateKingCastleMoves(self: *Self, moveList: *MoveList, kingSquare: u6, ene
 
     if(kingSideCastle){
         moveList.add(
-                        kingSquare, 
-                        kingSquare + 2, 
-                        .kingSideCastle, 
-                        colorBB, 
-                        pieceBB, 
-                        0, 
-                        0);
+            Move.New(
+                    kingSquare, 
+                    kingSquare + 2, 
+                    .kingSideCastle, 
+                    colorBB, 
+                    pieceBB, 
+                    0, 
+                    0)
+        );
     }
 
     if(queenSideCastle){
         moveList.add(
-                        kingSquare, 
-                        kingSquare - 2, 
-                        .queenSideCastle, 
-                        colorBB, 
-                        pieceBB, 
-                        0, 
-                        0);
+            Move.New( 
+                    kingSquare, 
+                    kingSquare - 2, 
+                    .queenSideCastle, 
+                    colorBB, 
+                    pieceBB, 
+                    0, 
+                    0)
+        );
     }
 }
 
@@ -1027,32 +969,44 @@ pub fn isKingInCheck(self: *Self, side: Side, occupancy: u64) bool{
     }
 }
 
-fn storePieceMoves(self: *Self, move_list: *MoveList, piece_info: MoveList.PieceStoreMoveInfo) void{
+pub inline fn isWhiteToPlay(self: Self) bool{
+    return self.to_play == .white;
+}
+
+pub inline fn isBlackToPlay(self: Self) bool{
+    return self.to_play == .black;
+}
+
+fn storePieceMoves(self: *Self, move_list: *MoveList, piece_info: PieceStoreMoveInfo) void{
     var moves: u64 = piece_info.legalSquares;
     var captures: u64 = piece_info.legalCaptures;
 
     while(moves > 0):(moves = bit_set.popLstb(moves)){
         move_list.add(
-            piece_info.from, 
-            @intCast(@ctz(moves)), 
-            .quietMove, 
-            piece_info.colorToPlayBB, 
-            piece_info.currentPieceBB,
-            0,
-            0
+            Move.New(
+                piece_info.from, 
+                @intCast(@ctz(moves)), 
+                .quietMove, 
+                piece_info.colorToPlayBB, 
+                piece_info.currentPieceBB,
+                0,
+                0)
         );
     }
 
     while(captures > 0): (captures = bit_set.popLstb(captures)){
         move_list.add(
-            piece_info.from, 
-            @intCast(@ctz(captures)), 
-            .capture, 
-            piece_info.colorToPlayBB, 
-            piece_info.currentPieceBB,
-            piece_info.enemyColorBB,
-            self.getPieceBitboardIdx(@intCast(@ctz(captures)))
+                Move.New(
+                piece_info.from, 
+                @intCast(@ctz(captures)), 
+                .capture, 
+                piece_info.colorToPlayBB, 
+                piece_info.currentPieceBB,
+                piece_info.enemyColorBB,
+                self.getPieceBitboardIdx(@intCast(@ctz(captures)))
+                )
         );
     }
 }
+
 
