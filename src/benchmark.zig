@@ -2,7 +2,8 @@ const std = @import("std");
 const perft = @import("perft.zig");
 const Board = @import("board.zig");
 
-
+// !!! Esto demomento solo hace pruebas de velocidad de perft !!!
+// TODO: Make a real benchmark for search
 pub fn runBench(io: std.Io) !void{
     var board = Board.init();
 

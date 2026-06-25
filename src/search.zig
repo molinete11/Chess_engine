@@ -13,16 +13,20 @@ const SearchResult = struct {
 };
 
 
-const PvLines = struct {
-    num_moves: u32,
+const check_mate_value: i32 = -999_999_999;
+
+const PvLine = struct{
+    count: u8,
     moves: [218]Move,
 };
 
-const check_mate_value: i32 = -999_999_999;
-
-fn negamax(board: *Board, depth: u32, max: u1, alpha: i32, beta: i32, time_left: i64, io: Io) i32{
-
+fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io: Io, pv_line: *PvLine) i32{
     var move_list = board.generateMoves();
+
+    var _pv_line: PvLine = .{
+        .count = 0,
+        .moves = undefined,
+    };
 
     if(depth == 0 or board.isCheckMate() or board.isDraw())
     {
@@ -38,7 +42,6 @@ fn negamax(board: *Board, depth: u32, max: u1, alpha: i32, beta: i32, time_left:
     moveOrdering(&move_list);
 
     var bestScore: i32 = std.math.minInt(i32);
-    var next_beta: i32 = beta;
     var next_alpha: i32 = alpha;
 
     var time_left_c = time_left;
@@ -50,31 +53,31 @@ fn negamax(board: *Board, depth: u32, max: u1, alpha: i32, beta: i32, time_left:
         const oponent_score = negamax(
             board, 
             depth - 1, 
-            max ^ 1, 
-            next_alpha, 
-            next_beta, 
+            -beta, 
+            -next_alpha, 
             time_left_c, 
             io,
+            &_pv_line
             );
-
-
-        bestScore = @max(-oponent_score, bestScore);
         board.unmakeMove(move_list.moves[i]);
 
-        next_alpha = @max(next_alpha, bestScore);
+        bestScore = @max(-oponent_score, bestScore);
 
         if(oponent_score == std.math.maxInt(i32)){ // no time left
             return std.math.maxInt(i32);
         }
 
-        if(max == 1){
+        if(bestScore >= beta) break;
+        if(bestScore > next_alpha) {
             next_alpha = bestScore;
-            if(next_alpha >= beta) break;    
+            pv_line.moves[0] = move_list.moves[i];
 
-        }else{
-            next_beta = -bestScore;
-            if(alpha >= next_beta) break;
-        }
+            for(0.._pv_line.count) |j|{
+                pv_line.moves[j + 1] = _pv_line.moves[j];
+            }
+
+            pv_line.count = _pv_line.count + 1;
+        }    
 
         const time_spend = clock.untilNow(io, .awake);
         time_left_c -= time_spend.toMilliseconds();
@@ -100,24 +103,32 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
     var depth: u32 = 0;
 
     while(true){
-        var alpha: i32 = std.math.minInt(i32);
-        var beta: i32 = std.math.maxInt(i32);
-
         var current_ply_best_move = std.mem.zeroes(Move);
         var current_ply_best_move_eval: i32 = std.math.minInt(i32);
 
+        var main_pv_line: PvLine = .{
+            .count = 0,
+            .moves = undefined,
+        };
+
         for(0..move_list.count) |i|{
+            var pv_line: PvLine = .{
+                .count = 0,
+                .moves = undefined,
+            };
+            
             const clock = std.Io.Clock.awake.now(io);
 
             var move = move_list.moves[i];
+
             board.makeMove(&move);
             const current_move_eval = -negamax(board, 
                                                     depth,
-                                                    @intFromEnum(board.to_play) ^ 1,
-                                                    alpha,
-                                                    beta,
+                                                    std.math.minInt(i32),
+                                                    std.math.maxInt(i32),
                                                     time_allocated, 
-                                                    io);
+                                                    io,
+                                                    &pv_line);
             board.unmakeMove(move);
 
             if(current_move_eval == std.math.maxInt(i32)){
@@ -130,13 +141,8 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             if(current_move_eval >= current_ply_best_move_eval){
                 current_ply_best_move = move;
                 current_ply_best_move_eval = current_move_eval;
+                main_pv_line = pv_line;
             }
-
-            if(board.to_play == .white){
-                alpha = current_ply_best_move_eval;
-            }else{
-                beta = -current_ply_best_move_eval;
-            } 
 
             const time_spend = clock.untilNow(io, .awake);
             
@@ -148,14 +154,28 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             if(time_allocated <= 0){
                 break;
             }
+
+            //std.debug.print("move: {s} pv line\n", .{uci.moveToUcimove(move)});
+
+            //for(0..pv_line.count) |j|{
+            //    std.debug.print(" {s} ", .{uci.moveToUcimove(pv_line.moves[j])});
+            //}
+
+            //std.debug.print("\n", .{});
         }
 
         if(time_allocated <= 0){
-            std.debug.print("not finished, current depth {} best move found {s} eval {}\n", .{
-                depth,
+            std.debug.print("not finished, best move found {s} eval {}\n", .{
                 uci.moveToUcimove(current_best_move),
                 current_best_move_eval});
-                break;
+
+            for(0..main_pv_line.count) |j|{
+                std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
+            }
+
+            std.debug.print("\n", .{});
+
+            break;
         }else{
             std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {}\n", .{
                 time_spend_between_plys, 
@@ -163,6 +183,12 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
                 depth,
                 uci.moveToUcimove(current_ply_best_move),
                 current_ply_best_move_eval});
+
+            for(0..main_pv_line.count) |j|{
+                std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
+            }
+
+            std.debug.print("\n", .{});
         }
 
         current_best_move = current_ply_best_move;

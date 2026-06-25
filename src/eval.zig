@@ -15,8 +15,8 @@ const activity_value: i32 = 2;
 const PAWNS_HEURISTICS = [_]i32{
     0, 0, 0, 0, 0, 0, 0, 0,
     5, 10, 10, -20, -20, 10, 10, 5,
-    5, -5,-10,  5, 5,-10, -5,  5,
-    0,  0,  0, 30, 30,  0,  0,  0,
+    0, -5,-10,  10, 10,-10, -5,  0,
+    0,  0,  0, 35, 35,  0,  0,  0,
     5,  5, 10, 25, 25, 10,  5,  5,
     10, 10, 20, 30, 30, 20, 10, 10,
     50, 50, 50, 50, 50, 50, 50, 50,
@@ -26,10 +26,10 @@ const PAWNS_HEURISTICS = [_]i32{
 const KNIGHT_HEURISTICS = [_]i32{
     -50,-40,-30,-30,-30,-30,-40,-50,
     -40,-20,  0,  0,  0,  0,-20,-40,
-    -35,  0, 15, 10, 10, 15,  0,-35,
-    -35,  5, 10, 20, 20, 10,  5,-35,
-    -35,  0, 10, 20, 20, 10,  0,-35,
-    -35,  5, 15, 10, 10, 15,  5,-35,
+    -40,  0, 15, 10, 10, 15,  0,-40,
+    -40,  5, 10, 20, 20, 10,  5,-40,
+    -40,  0, 10, 20, 20, 10,  0,-40,
+    -40,  5, 15, 10, 10, 15,  5,-40,
     -40,-20,  0,  5,  5,  0,-20,-40,
     -50,-40,-35,-35,-35,-35,-40,-50,
 };
@@ -118,7 +118,6 @@ fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 
 }
 
 fn getMaterialEval(white_pieces: []u64, black_pieces: []u64) i32 {
-
     const white_pawns: i32 = @bitCast(@as(u32, @popCount(white_pieces[0])));
     const white_bishop: i32 = @bitCast(@as(u32, @popCount(white_pieces[1])));
     const white_knight: i32 = @bitCast(@as(u32, @popCount(white_pieces[2])));

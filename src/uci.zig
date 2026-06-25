@@ -166,9 +166,9 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
     var depth: u32 = default_search_depth;
 
-    var wtime: i32 = 120000;
+    var wtime: i32 = 60000;
 
-    var btime: i32 = 120000;
+    var btime: i32 = 60000;
 
     const winc: i32 = 0;
 
