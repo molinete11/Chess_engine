@@ -28,6 +28,8 @@ board: Board,
 writer: *Io.Writer,
 reader: *Io.Reader,
 io: Io,
+// TODO: try another way of getting moves converted into text without using a global _buffer
+var movetext_buffer: [1024]u8 = undefined;
 
 pub fn Init(writer: *Io.Writer, reader: *Io.Reader, io: Io) Self{
     return .{
@@ -166,13 +168,13 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
     var depth: u32 = default_search_depth;
 
-    var wtime: i32 = 60000;
+    var wtime: i32 = 152000;
 
-    var btime: i32 = 60000;
+    var btime: i32 = 152000;
 
-    const winc: i32 = 0;
+    const winc: i32 = 100;
 
-    const binc: i32 = 0;
+    const binc: i32 = 100;
 
     const movetime: u32 = 0;
 
@@ -186,14 +188,14 @@ fn parseGo(self: *Self, args: []const u8) !void{
                 depth = std.fmt.parseInt(u32, d, 10) catch unreachable;
             }
         }
-        if(mem.eql(u8, args, "wtime")){
+        if(mem.eql(u8, arg, "wtime")){
             if(tokens.next()) |wt|{
 
                 wtime = std.fmt.parseInt(i32, wt, 10) catch unreachable;
     
             }
         }
-        if(mem.eql(u8, args, "btime")){
+        if(mem.eql(u8, arg, "btime")){
             if(tokens.next()) |bt|{
 
                 btime = std.fmt.parseInt(i32, bt, 10) catch unreachable;
@@ -201,13 +203,7 @@ fn parseGo(self: *Self, args: []const u8) !void{
             }            
         }
     }
-
-    std.debug.print("depth {}\n", .{depth});
-    std.debug.print("wtime {}\n", .{wtime});
-    std.debug.print("btime {}\n", .{btime});
-
-    //std.debug.print("search info wtime {} btime {}\n", .{wtime, btime});
-
+    
     const move = search.getBestMove(self.io,
                         &self.board, 
                         depth, 
@@ -359,8 +355,6 @@ fn getToken(buffer: []const u8, idx: usize) Loc{
 }
 
 pub fn moveToUcimove(move: Move) []u8{
-    var buffer: [1024]u8 = @splat(0);
-
     if(@intFromEnum(move.flags) >= 6){
 
         var promotion: u8 = 0;
@@ -372,16 +366,9 @@ pub fn moveToUcimove(move: Move) []u8{
             else => {},
         }
 
-        return std.fmt.bufPrint(&buffer, "{s}{s}{c}", 
-        .{
-            squares[move.from], 
-            squares[move.to],
-            promotion,
-            }) catch unreachable;
+        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}{c}", .{squares[move.from], squares[move.to],promotion,}) catch unreachable;
     }else{
-        const slice =  std.fmt.bufPrint(&buffer, "{s}{s}", .{squares[move.from], squares[move.to]}) catch unreachable;
-        //std.debug.print("slice {s}\n", .{slice});
-        return slice;
+        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}", .{squares[move.from], squares[move.to]}) catch unreachable;
     }
 }
 

@@ -52,7 +52,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
         board.makeMove(&move_list.moves[i]);
         const oponent_score = negamax(
             board, 
-            depth - 1, 
+            depth -% 1, 
             -beta, 
             -next_alpha, 
             time_left_c, 
@@ -72,17 +72,24 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
             next_alpha = bestScore;
             pv_line.moves[0] = move_list.moves[i];
 
-            for(0.._pv_line.count) |j|{
-                pv_line.moves[j + 1] = _pv_line.moves[j];
+            //for(0.._pv_line.count) |j|{
+            //    pv_line.moves[j + 1] = _pv_line.moves[j];
+            //}
+
+            if(_pv_line.count != 0){
+                std.debug.assert(pv_line.moves[1.._pv_line.count+1].len == _pv_line.moves[0.._pv_line.count].len);
+                @memcpy(pv_line.moves[1.._pv_line.count+1], _pv_line.moves[0.._pv_line.count]);
             }
+            
 
             pv_line.count = _pv_line.count + 1;
+
         }    
 
         const time_spend = clock.untilNow(io, .awake);
         time_left_c -= time_spend.toMilliseconds();
 
-        if(time_left_c < 0){
+        if(time_left_c <= 0){
             return std.math.maxInt(i32);
         }
     }
@@ -111,6 +118,8 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             .moves = undefined,
         };
 
+        var alpha: i32 = std.math.minInt(i32) + 1;
+
         for(0..move_list.count) |i|{
             var pv_line: PvLine = .{
                 .count = 0,
@@ -121,11 +130,13 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
 
             var move = move_list.moves[i];
 
+            //std.debug.print("move played {s}\n", .{uci.moveToUcimove(move)});
+
             board.makeMove(&move);
             const current_move_eval = -negamax(board, 
                                                     depth,
-                                                    std.math.minInt(i32),
-                                                    std.math.maxInt(i32),
+                                                    std.math.minInt(i32) + 1,
+                                                    -alpha,
                                                     time_allocated, 
                                                     io,
                                                     &pv_line);
@@ -138,15 +149,21 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
                 };
             }
 
-            if(current_move_eval >= current_ply_best_move_eval){
+            if(current_move_eval > current_ply_best_move_eval){
                 current_ply_best_move = move;
                 current_ply_best_move_eval = current_move_eval;
-                main_pv_line = pv_line;
+
+                if(current_ply_best_move_eval > alpha){
+                    alpha = current_ply_best_move_eval;
+                
+                    @memcpy(main_pv_line.moves[0..pv_line.count], pv_line.moves[0..pv_line.count]);
+                    
+                    main_pv_line.count = pv_line.count;
+                }
             }
 
             const time_spend = clock.untilNow(io, .awake);
-            
-            //std.debug.print("move {s} eval {}\n", .{uci.moveToUcimove(move), current_move_eval});
+        
 
             time_spend_between_plys +%= time_spend.toMilliseconds();
             time_allocated -= time_spend.toMilliseconds();
@@ -154,14 +171,6 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             if(time_allocated <= 0){
                 break;
             }
-
-            //std.debug.print("move: {s} pv line\n", .{uci.moveToUcimove(move)});
-
-            //for(0..pv_line.count) |j|{
-            //    std.debug.print(" {s} ", .{uci.moveToUcimove(pv_line.moves[j])});
-            //}
-
-            //std.debug.print("\n", .{});
         }
 
         if(time_allocated <= 0){
@@ -170,10 +179,10 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
                 current_best_move_eval});
 
             for(0..main_pv_line.count) |j|{
-                std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
+                std.log.debug(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
             }
 
-            std.debug.print("\n", .{});
+            std.log.debug("\n", .{});
 
             break;
         }else{

@@ -64,6 +64,11 @@ pub const BoardFlags = enum{
     threerepetition
 };
 
+const BoardHistoy = struct {
+    key: [512]u64,
+    count: u16,
+};
+
 pub const notAFile: u64 = 0xfefefefefefefefe;
 pub const notHFile: u64 = 0x7f7f7f7f7f7f7f7f;
 pub const notABFile: u64 = 0xfcfcfcfcfcfcfcfc;
@@ -98,6 +103,10 @@ half_moves: u16,
 move_number: u16,
 
 flags: BoardFlags,
+
+key: u64,
+
+
 
 pub fn init() Self{
 
