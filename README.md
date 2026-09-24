@@ -10,17 +10,13 @@ on chess.com I have 2060 approx. so if I'm able to make a chess engine strong en
     -   isready
     -   position [fen | startpos] moves move1 ...
     -   go 
-        - depth \<n>
+        - depth \<n> 
+        - wtime \<n>
+        - btime \<n>
+        - winc \<n>
+        - binc <n>
         - perft \<n>
 
--   board representation: bitboards
-
-# TODO
-
--   Improve move generation
--   Improve makeMove function readability
--   Time managment
--   Move ordering
 
 # Prerequisites
 

@@ -2,6 +2,9 @@ const std = @import("std");
 const Uci = @import("uci.zig");
 const Io = std.Io;
 
+const Board = @import("board.zig");
+const look_up_tables = @import("lookupTables.zig");
+
 pub fn main(init: std.process.Init) !void {
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -16,4 +19,3 @@ pub fn main(init: std.process.Init) !void {
 
     try uci.run();
 }
-

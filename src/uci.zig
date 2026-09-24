@@ -11,7 +11,7 @@ const Io = std.Io;
 
 const Self = @This();
 
-const default_search_depth: u32 = 6;
+const default_search_depth: u32 = std.math.maxInt(u32);
 
 const squares = [_][]const u8{
                 "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
@@ -168,13 +168,13 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
     var depth: u32 = default_search_depth;
 
-    var wtime: i32 = 152000;
+    var wtime: i32 = std.math.maxInt(i32);
 
-    var btime: i32 = 152000;
+    var btime: i32 = std.math.maxInt(i32);
 
-    const winc: i32 = 100;
+    const winc: i32 = std.math.maxInt(i32);
 
-    const binc: i32 = 100;
+    const binc: i32 = std.math.maxInt(i32);
 
     const movetime: u32 = 0;
 
@@ -234,11 +234,11 @@ fn parseMove(self: *Self, args: []const u8) void{
     var illegal: bool = true;
 
     for(0..moves.count) |i|{
-        if(from == moves.moves[i].from and to == moves.moves[i].to and !isPromotion){
-            self.board.makeMove(&moves.moves[i]);
+        if(from == moves.moves[i].from() and to == moves.moves[i].to() and !isPromotion){
+            self.board.makeMove2(moves.moves[i]);
             illegal = false;
             break;
-        }else if(from == moves.moves[i].from and to == moves.moves[i].to and isPromotion){
+        }else if(from == moves.moves[i].from() and to == moves.moves[i].to() and isPromotion){
             illegal = false;
             promotionsAvailable[promotionCount] = @intCast(i);
             promotionCount += 1;
@@ -254,18 +254,18 @@ fn parseMove(self: *Self, args: []const u8) void{
 
     if(isPromotion){
         for(0..promotionCount) |i|{
-            if(args[4] == 'q' and (moves.moves[promotionsAvailable[i]].flags == .queenPromotion or 
-                                    moves.moves[promotionsAvailable[i]].flags == .queenPromotionCapture)){
-                self.board.makeMove(&moves.moves[promotionsAvailable[i]]);
-            }else if(args[4] == 'r' and (moves.moves[promotionsAvailable[i]].flags == .rookPromotion or 
-                                    moves.moves[promotionsAvailable[i]].flags == .rookPromotionCapture)){
-                self.board.makeMove(&moves.moves[promotionsAvailable[i]]);                        
-            }else if(args[4] == 'n' and (moves.moves[promotionsAvailable[i]].flags == .knightPromotion or 
-                                    moves.moves[promotionsAvailable[i]].flags == .knightPromotionCapture)){
-                self.board.makeMove(&moves.moves[promotionsAvailable[i]]);
-            }else if(args[4] == 'b' and (moves.moves[promotionsAvailable[i]].flags == .bishopPromotion or 
-                                    moves.moves[promotionsAvailable[i]].flags == .bishopPromotionCapture)){
-                self.board.makeMove(&moves.moves[promotionsAvailable[i]]);
+            if(args[4] == 'q' and (moves.moves[promotionsAvailable[i]].flag() == .queenPromotion or 
+                                    moves.moves[promotionsAvailable[i]].flag() == .queenPromotionCapture)){
+                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+            }else if(args[4] == 'r' and (moves.moves[promotionsAvailable[i]].flag() == .rookPromotion or 
+                                    moves.moves[promotionsAvailable[i]].flag() == .rookPromotionCapture)){
+                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);                        
+            }else if(args[4] == 'n' and (moves.moves[promotionsAvailable[i]].flag() == .knightPromotion or 
+                                    moves.moves[promotionsAvailable[i]].flag() == .knightPromotionCapture)){
+                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+            }else if(args[4] == 'b' and (moves.moves[promotionsAvailable[i]].flag() == .bishopPromotion or 
+                                    moves.moves[promotionsAvailable[i]].flag() == .bishopPromotionCapture)){
+                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
             }
         }
     }
@@ -355,20 +355,20 @@ fn getToken(buffer: []const u8, idx: usize) Loc{
 }
 
 pub fn moveToUcimove(move: Move) []u8{
-    if(@intFromEnum(move.flags) >= 6){
+    if(@intFromEnum(move.flag()) >= 6){
 
         var promotion: u8 = 0;
-        switch (move.flags) {
+        switch (move.flag()) {
             .bishopPromotion, .bishopPromotionCapture => {promotion = 'b';},
-            .knightPromotion, .knightPromotionCapture => {promotion = 'k';},
+            .knightPromotion, .knightPromotionCapture => {promotion = 'n';},
             .rookPromotion, .rookPromotionCapture => {promotion = 'r';},
             .queenPromotion, .queenPromotionCapture => {promotion = 'q';},
             else => {},
         }
 
-        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}{c}", .{squares[move.from], squares[move.to],promotion,}) catch unreachable;
+        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}{c}", .{squares[move.from()], squares[move.to()],promotion,}) catch unreachable;
     }else{
-        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}", .{squares[move.from], squares[move.to]}) catch unreachable;
+        return std.fmt.bufPrint(&movetext_buffer, "{s}{s}", .{squares[move.from()], squares[move.to()]}) catch unreachable;
     }
 }
 

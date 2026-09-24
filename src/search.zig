@@ -20,8 +20,9 @@ const PvLine = struct{
     moves: [218]Move,
 };
 
-fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io: Io, pv_line: *PvLine) i32{
+fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io: Io, pv_line: *PvLine, nodes: *u64) i32{
     var move_list = board.generateMoves();
+    nodes.* += 1;
 
     var _pv_line: PvLine = .{
         .count = 0,
@@ -49,7 +50,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
     for (0..move_list.count) |i| {
         const clock = std.Io.Clock.awake.now(io);
 
-        board.makeMove(&move_list.moves[i]);
+        board.makeMove2(move_list.moves[i]);
         const oponent_score = negamax(
             board, 
             depth -% 1, 
@@ -57,9 +58,10 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
             -next_alpha, 
             time_left_c, 
             io,
-            &_pv_line
+            &_pv_line,
+            nodes
             );
-        board.unmakeMove(move_list.moves[i]);
+        board.unmakeMove2(move_list.moves[i]);
 
         bestScore = @max(-oponent_score, bestScore);
 
@@ -97,7 +99,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
     return bestScore;
 }
 
-fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{ 
+fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) SearchResult{ 
     var time_allocated = time;
     var move_list = board.generateMoves();
     moveOrdering(&move_list);
@@ -107,9 +109,10 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
 
     var time_spend_between_plys: i64 = 0;
 
-    var depth: u32 = 0;
+    
 
-    while(true){
+    for(0..depth)|c_depth|{
+        var total_nodes: u64 = 0;
         var current_ply_best_move = std.mem.zeroes(Move);
         var current_ply_best_move_eval: i32 = std.math.minInt(i32);
 
@@ -121,6 +124,7 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
         var alpha: i32 = std.math.minInt(i32) + 1;
 
         for(0..move_list.count) |i|{
+            var nodes: u64 = 0;
             var pv_line: PvLine = .{
                 .count = 0,
                 .moves = undefined,
@@ -128,19 +132,24 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             
             const clock = std.Io.Clock.awake.now(io);
 
-            var move = move_list.moves[i];
+            
+
+            const move = move_list.moves[i];
 
             //std.debug.print("move played {s}\n", .{uci.moveToUcimove(move)});
 
-            board.makeMove(&move);
+            board.makeMove2(move);
             const current_move_eval = -negamax(board, 
-                                                    depth,
+                                                    @intCast(c_depth),
                                                     std.math.minInt(i32) + 1,
                                                     -alpha,
                                                     time_allocated, 
                                                     io,
-                                                    &pv_line);
-            board.unmakeMove(move);
+                                                    &pv_line,
+                                                    &nodes);
+            board.unmakeMove2(move);
+
+            total_nodes += nodes;
 
             if(current_move_eval == std.math.maxInt(i32)){
                 return .{
@@ -162,8 +171,9 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
                 }
             }
 
+
             const time_spend = clock.untilNow(io, .awake);
-        
+            
 
             time_spend_between_plys +%= time_spend.toMilliseconds();
             time_allocated -= time_spend.toMilliseconds();
@@ -177,21 +187,15 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
             std.debug.print("not finished, best move found {s} eval {}\n", .{
                 uci.moveToUcimove(current_best_move),
                 current_best_move_eval});
-
-            for(0..main_pv_line.count) |j|{
-                std.log.debug(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
-            }
-
-            std.log.debug("\n", .{});
-
             break;
         }else{
-            std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {}\n", .{
+            std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {} tot nodes {}\n", .{
                 time_spend_between_plys, 
                 time_allocated, 
-                depth,
+                c_depth,
                 uci.moveToUcimove(current_ply_best_move),
-                current_ply_best_move_eval});
+                current_ply_best_move_eval,
+                total_nodes});
 
             for(0..main_pv_line.count) |j|{
                 std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
@@ -202,8 +206,8 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
 
         current_best_move = current_ply_best_move;
         current_best_move_eval = current_ply_best_move_eval;
-        depth += 1;
         time_spend_between_plys = 0;
+        total_nodes = 0;
     }
 
     return .{
@@ -214,10 +218,7 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64) SearchResult{
 
 pub fn getBestMove(io: Io, board: *Board, depth: u32, wtime: i32, btime: i32, winc: i32, binc: i32, movetime: u32) []u8{
 
-    // TODO: make iterative deepening 
-
     _ = movetime;
-    _ = depth;
 
     var allocated_time: i64 = 0;
 
@@ -227,7 +228,7 @@ pub fn getBestMove(io: Io, board: *Board, depth: u32, wtime: i32, btime: i32, wi
         allocated_time = @divFloor(btime, 20) + @divFloor(binc, 2);
     }
 
-    const search_result = iterativeDeepening(io, board, allocated_time);
+    const search_result = iterativeDeepening(io, board, allocated_time, depth);
 
     std.log.debug("bestmove {s} eval {}\n", .{uci.moveToUcimove(search_result.move), search_result.eval});
 
@@ -236,10 +237,38 @@ pub fn getBestMove(io: Io, board: *Board, depth: u32, wtime: i32, btime: i32, wi
 
 fn moveOrdering(move_list: *MoveList) void{
     var i: usize = 0;
-    
+
     for(i+1..move_list.count) |j|{
 
-        if(move_list.moves[j].flags == .capture){
+        if(move_list.moves[j].isPromotion()){
+
+            const tmp = move_list.moves[i];
+
+            move_list.moves[i] = move_list.moves[j];
+            move_list.moves[j] = tmp;
+
+            i += 1;
+        }
+    }
+
+    for(i+1..move_list.count) |j|{
+        const move = move_list.moves[j];
+
+        if(move.flag() == .capture){
+
+            const tmp = move_list.moves[i];
+
+            move_list.moves[i] = move_list.moves[j];
+            move_list.moves[j] = tmp;
+
+            i += 1;
+        }
+    }
+
+    for(i+1..move_list.count) |j|{
+        const move = move_list.moves[j];
+
+        if(move.flag() == .queenSideCastle or move.flag() == .kingSideCastle){
 
             const tmp = move_list.moves[i];
 
