@@ -61,17 +61,16 @@ const FenError = error{
 
 const Undo = struct {
     key: u64,
+    halfmove_clock: u32,
     ep_square: u6,
     castle_rights: u4,
     capture: u4,
-    capture_or_pawnpush: bool,
-    flag: State // temporal
 };
 
 const State = enum {
-    none,
+    ongoin,
     checkmate,
-    stealmate
+    draw
 };
 
 pub const notAFile: u64 = 0xfefefefefefefefe;
@@ -95,27 +94,27 @@ pub const default_fen: []const u8 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
 
 const max_move_game: u16 = 512;
 
+position_history: [max_move_game]Undo,
+
 bitboards: [15]u64,
 
 bitboard_idx: [8][8]u4,
 
-to_play: Side,
-
-castle_rights: u4,  // bit 1 = K, bit 2 = Q, bit 3 = k, bit 4 = q
-
 empty: u64, 
-
-en_passant_sq: u6,
-
-ply: u16,
-
-move_number: u16,
 
 key: u64,
 
-position_history: [max_move_game]Undo,
+ply: u16,
 
-flags: State,
+halfmove_clock: u32,
+
+move_number: u16,
+
+en_passant_sq: u6,
+
+castle_rights: u4,  // bit 1 = K, bit 2 = Q, bit 3 = k, bit 4 = q
+
+to_play: Side,
 
 
 pub fn init() Self{
@@ -227,14 +226,6 @@ pub fn restartPos(self: *Self) void{
     self.setPos(default_fen) catch unreachable;
 }
 
-pub inline fn isCheckMate(self: *Self) bool{
-    return self.flags == .checkmate;
-}
-
-pub inline fn isDraw(self: *Self) bool{
-    return self.flags == .stealmate;
-}
-
 pub fn getFen(self: *Self) []u8{
     _ = self;
 
@@ -256,8 +247,17 @@ inline fn clearBoard(self: *Self) void{
     self.ply = 0;
     self.key = 0;
     self.to_play = .white;
-    self.flags = .none;
 }
+
+pub fn isThreeFoldRepetition(self: *Self) bool{
+    _ = self;
+    return false;
+}
+
+pub fn isFiftyMoveRule(self: *Self) bool{
+    return self.halfmove_clock >= 100;
+}
+
 
 pub fn makeMove2(self: *Self, move: Move) void{
 
@@ -284,7 +284,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
     self.position_history[self.ply].ep_square = self.en_passant_sq;
     self.position_history[self.ply].castle_rights = self.castle_rights;
     self.position_history[self.ply].capture = enemy_piece_idx;
-    self.position_history[self.ply].flag = self.flags; // temporal
+    self.position_history[self.ply].halfmove_clock = self.halfmove_clock;
 
     self.bitboards[team_piece_idx] ^= from_toU64;
     self.bitboards[team_color_idx.toInt()] ^= from_toU64;
@@ -292,23 +292,16 @@ pub fn makeMove2(self: *Self, move: Move) void{
     self.bitboard_idx[from_rank][from_file] = 15;
     self.en_passant_sq = 0;
 
-    //std.debug.print("{} int {b}\n", .{move.flag(), move.flag().toInt()});
-    //std.debug.print("{}\n", .{self.to_play});
-    //std.debug.print("{} {}\n", .{team_piece_idx, team_color_idx});
-    //std.debug.print("{} {}\n", .{enemy_piece_idx, enemy_color_idx});
-    //std.debug.print("0x{x}\n", .{self.bitboards[5]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[11]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[3]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[9]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[12]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[13]});
-    //std.debug.print("0x{x}\n", .{self.bitboards[14]});
+    self.halfmove_clock += 1;
+
+    self.halfmove_clock = if(team_piece_idx == 0 or team_piece_idx == 6) 0 else self.halfmove_clock;
 
     switch (move.flag()) {
             .capture => {
                 //self.position_history[self.ply].capture = enemy_piece_idx;
                 self.bitboards[enemy_piece_idx] ^= toU64;
                 self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                self.halfmove_clock = 0;
             },
             .doublePawnPush => {
                 const offset: i6 = if(self.isWhiteToPlay()) -8 else 8;
@@ -319,6 +312,8 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 const ep_sqU64 = (@as(u64, 1) << (to +% @as(u6, @bitCast(offset))));
                 const enemy_pawn_piece_idx: PieceBitboardIdx = if(self.isWhiteToPlay()) .bPawn else .wPawn;
                 self.bitboard_idx[from_rank][to_file] = 15;
+
+                self.halfmove_clock = 0;
 
                 self.position_history[self.ply].capture = enemy_pawn_piece_idx.toInt();
 
@@ -363,6 +358,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.halfmove_clock = 0;
                 }
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
@@ -377,6 +373,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.halfmove_clock = 0;
                 }
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
@@ -391,6 +388,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.halfmove_clock = 0;
                 }
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
@@ -405,6 +403,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.halfmove_clock = 0;
                 }
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
@@ -459,8 +458,8 @@ pub fn unmakeMove2(self: *Self, move: Move) void{
     self.castle_rights = self.position_history[self.ply].castle_rights;
     self.en_passant_sq = self.position_history[self.ply].ep_square;
     self.key = self.position_history[self.ply].key;
+    self.halfmove_clock = self.position_history[self.ply].halfmove_clock;
     const capture_piece = self.position_history[self.ply].capture;
-    self.flags = self.position_history[self.ply].flag; // temporal
 
     const from = move.from();
     const to = move.to();
@@ -552,7 +551,6 @@ pub fn unmakeMove2(self: *Self, move: Move) void{
     self.empty = ~self.bitboards[PieceBitboardIdx.toInt(.all)];
 }
 
-
 pub fn generateMoves(self: *Self) MoveList{
     const blackToPlay: u4 = @bitCast(-@as(i4, @intFromBool(self.isBlackToPlay())));
     const startPieceTeamIdx: u4 = (6 & blackToPlay);
@@ -605,10 +603,6 @@ pub fn generateMoves(self: *Self) MoveList{
             .legalCaptures = kingMoves & enemy,
             .from = kingSquare,
         });
-
-        if(move_list.count == 0){
-            self.flags = .checkmate;
-        }
 
         return move_list;
     }
@@ -777,14 +771,6 @@ pub fn generateMoves(self: *Self) MoveList{
             .legalCaptures = moveset & enemy,
             .from = move_set_list.from[i],
         });
-    }
-
-    if(move_list.count == 0){
-        if(is_king_in_check){
-            self.flags = .checkmate;
-        }else{
-            self.flags = .stealmate;
-        }
     }
 
     return move_list;
