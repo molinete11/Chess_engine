@@ -107,6 +107,9 @@ fn printBoard(self: *Self) !void{
         try self.writer.print("  ----------------------------------------------\n", .{});
         rank -%= 1;
     }
+
+    try self.writer.print("fen: {s}\n", .{self.board.getFen()});
+    try self.writer.print("key: 0x{X}\n", .{self.board.key});
 }
 
 fn getPieceSymbol(self: *Self, piece: u64) u8{

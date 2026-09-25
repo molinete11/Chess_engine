@@ -3,6 +3,7 @@ const lookup_tables = @import("lookupTables.zig");
 const bit_set = @import("bitSet.zig");
 const Move = @import("move.zig");
 const MoveList = @import("moveList.zig");
+const zobristHash = @import("zobristHash.zig");
 
 const Self = @This();
 
@@ -170,6 +171,7 @@ pub fn setPos(self: *Self, fen: []const u8) !void{
 
         self.bitboards[bb] ^= sq;
         self.bitboard_idx[rank][file] = bb;
+        self.key ^= zobristHash.keys[bb][@ctz(sq)];
 
         if(bb >= 6){
             self.bitboards[@intFromEnum(PieceBitboardIdx.black)] ^= sq;
@@ -189,8 +191,10 @@ pub fn setPos(self: *Self, fen: []const u8) !void{
 
     if(std.mem.eql(u8, whiteToPlay, "w")){
         self.to_play = .white;
+        self.key ^= zobristHash.side_keys[0];
     }else if(std.mem.eql(u8, whiteToPlay, "b")){
         self.to_play = .black;
+        self.key ^= zobristHash.side_keys[1];
     }else{
         return FenError.InvalidFen;
     }
@@ -199,10 +203,10 @@ pub fn setPos(self: *Self, fen: []const u8) !void{
 
     for(0..castleRights.len) |i|{
         switch (castleRights[i]) {
-            'K' => {self.castle_rights ^= 0x1;},
-            'Q' => {self.castle_rights ^= 0x2;},
-            'k' => {self.castle_rights ^= 0x4;},
-            'q' => {self.castle_rights ^= 0x8;},
+            'K' => {self.castle_rights ^= 0x1; self.key ^= zobristHash.castling_rights[0];},
+            'Q' => {self.castle_rights ^= 0x2; self.key ^= zobristHash.castling_rights[1];},
+            'k' => {self.castle_rights ^= 0x4; self.key ^= zobristHash.castling_rights[2];},
+            'q' => {self.castle_rights ^= 0x8; self.key ^= zobristHash.castling_rights[3];},
             else => {},
         }
     }
@@ -214,11 +218,14 @@ pub fn setPos(self: *Self, fen: []const u8) !void{
         const rankFrom: u10 = enPassantSquare[1] - '1';
         const sq: u10 = rankFrom * 8 + fileFrom;
 
+        self.key ^= zobristHash.ep_file[fileFrom];
+
         if(!(rankFrom == 7 or rankFrom == 3)){
             return FenError.InvalidFen;
         }
 
         self.en_passant_sq = @intCast(sq);
+
     }
 }
 
@@ -226,7 +233,7 @@ pub fn restartPos(self: *Self) void{
     self.setPos(default_fen) catch unreachable;
 }
 
-pub fn getFen(self: *Self) []u8{
+pub fn getFen(self: *Self) [92]u8{
     _ = self;
 
     const fen: [92]u8 = @splat(0);
@@ -249,15 +256,26 @@ inline fn clearBoard(self: *Self) void{
     self.to_play = .white;
 }
 
-pub fn isThreeFoldRepetition(self: *Self) bool{
-    _ = self;
+pub fn isThreefoldRepetition(self: *Self) bool{ // incomplete
+
+    var n: u32 = 0;
+
+    for(1..self.halfmove_clock) |i|{ 
+        if(self.position_history[self.ply - i].key == self.key){
+            n += 1;
+        }
+
+        if(n == 3){
+            return true;
+        }
+    }
+
     return false;
 }
 
 pub fn isFiftyMoveRule(self: *Self) bool{
     return self.halfmove_clock >= 100;
 }
-
 
 pub fn makeMove2(self: *Self, move: Move) void{
 
@@ -290,7 +308,13 @@ pub fn makeMove2(self: *Self, move: Move) void{
     self.bitboards[team_color_idx.toInt()] ^= from_toU64;
     self.bitboard_idx[to_rank][to_file] = team_piece_idx;
     self.bitboard_idx[from_rank][from_file] = 15;
+    if(self.en_passant_sq != 0){
+        self.key ^= zobristHash.keys[self.en_passant_sq & 7];
+    }
     self.en_passant_sq = 0;
+
+    self.key ^= zobristHash.keys[team_piece_idx][from];
+    self.key ^= zobristHash.keys[team_piece_idx][to];
 
     self.halfmove_clock += 1;
 
@@ -301,18 +325,20 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 //self.position_history[self.ply].capture = enemy_piece_idx;
                 self.bitboards[enemy_piece_idx] ^= toU64;
                 self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                self.key ^= zobristHash.keys[enemy_piece_idx][to];
                 self.halfmove_clock = 0;
             },
             .doublePawnPush => {
                 const offset: i6 = if(self.isWhiteToPlay()) -8 else 8;
                 self.en_passant_sq = (to +% @as(u6, @bitCast(offset)));
+                self.key ^= zobristHash.ep_file[self.en_passant_sq & 7];
             },
             .epCapture => {
                 const offset: i6 = if(self.isWhiteToPlay()) -8 else 8;
                 const ep_sqU64 = (@as(u64, 1) << (to +% @as(u6, @bitCast(offset))));
                 const enemy_pawn_piece_idx: PieceBitboardIdx = if(self.isWhiteToPlay()) .bPawn else .wPawn;
                 self.bitboard_idx[from_rank][to_file] = 15;
-
+                self.key ^= zobristHash.keys[enemy_piece_idx][@ctz(ep_sqU64)];
                 self.halfmove_clock = 0;
 
                 self.position_history[self.ply].capture = enemy_pawn_piece_idx.toInt();
@@ -333,7 +359,17 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 self.bitboards[team_rook_idx.toInt()] ^= rook_moveU64;
                 self.bitboards[team_color_idx.toInt()] ^= rook_moveU64;
                 self.bitboard_idx[rook_to_rank][rook_to_file] = self.bitboard_idx[rook_from_rank][rook_from_file];
-                self.bitboard_idx[rook_from_rank][rook_from_file] = 15;    
+                self.bitboard_idx[rook_from_rank][rook_from_file] = 15;
+
+                const sq_from = rook_from_rank * 8 + rook_from_file;
+                const sq_to = rook_to_rank * 8 + rook_to_file;
+
+                self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_from];
+                self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_to];    
+
+                const white: u4 = if(self.isWhiteToPlay()) 0 else 2;
+
+                self.key ^= zobristHash.castling_rights[white] ^ zobristHash.castling_rights[white + 1];
             },
             .queenSideCastle => {
                 const team_rook_idx: PieceBitboardIdx = if(self.isWhiteToPlay()) .wRook else .bRook;
@@ -349,6 +385,17 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 self.bitboards[team_color_idx.toInt()] ^= rook_moveU64;
                 self.bitboard_idx[rook_to_rank][rook_to_file] = self.bitboard_idx[rook_from_rank][rook_from_file];
                 self.bitboard_idx[rook_from_rank][rook_from_file] = 15;
+
+                const sq_from = rook_from_rank * 8 + rook_from_file;
+                const sq_to = rook_to_rank * 8 + rook_to_file;
+
+                self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_from];
+                self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_to];
+
+
+                const white: u4 = if(self.isWhiteToPlay()) 0 else 2;
+
+                self.key ^= zobristHash.castling_rights[white] ^ zobristHash.castling_rights[white + 1];  
             },
             .knightPromotion, .knightPromotionCapture => {
                 const capture = (move.flag().toInt() & 0x4) > 0;
@@ -358,8 +405,12 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.key ^= zobristHash.keys[enemy_piece_idx][to];
                     self.halfmove_clock = 0;
                 }
+
+                self.key ^= zobristHash.keys[team_piece_idx][to];
+                self.key ^= zobristHash.keys[target_piece_promotion.toInt()][to];
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
                 self.bitboards[team_piece_idx] ^= toU64;
@@ -373,8 +424,12 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.key ^= zobristHash.keys[enemy_piece_idx][to];
                     self.halfmove_clock = 0;
                 }
+
+                self.key ^= zobristHash.keys[team_piece_idx][to];
+                self.key ^= zobristHash.keys[target_piece_promotion.toInt()][to];
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
                 self.bitboards[team_piece_idx] ^= toU64;
@@ -388,8 +443,12 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.key ^= zobristHash.keys[enemy_piece_idx][to];
                     self.halfmove_clock = 0;
                 }
+
+                self.key ^= zobristHash.keys[team_piece_idx][to];
+                self.key ^= zobristHash.keys[target_piece_promotion.toInt()][to];
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
                 self.bitboards[team_piece_idx] ^= toU64;
@@ -403,8 +462,12 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 if(capture){
                     self.bitboards[enemy_piece_idx] ^= toU64;
                     self.bitboards[enemy_color_idx.toInt()] ^= toU64;
+                    self.key ^= zobristHash.keys[enemy_piece_idx][to];
                     self.halfmove_clock = 0;
                 }
+
+                self.key ^= zobristHash.keys[team_piece_idx][to];
+                self.key ^= zobristHash.keys[target_piece_promotion.toInt()][to];
 
                 self.bitboards[target_piece_promotion.toInt()] ^= toU64;
                 self.bitboards[team_piece_idx] ^= toU64;
@@ -416,38 +479,35 @@ pub fn makeMove2(self: *Self, move: Move) void{
     const sus: u4 = if(self.isWhiteToPlay()) ~@as(u4, 0x3) else ~@as(u4, 0xC);
     self.castle_rights &= if(team_piece_idx == PieceBitboardIdx.toInt(.wKing) or team_piece_idx == PieceBitboardIdx.toInt(.bKing)) sus else ~@as(u4, 0);
 
-    switch (team_piece_idx) {
-        PieceBitboardIdx.toInt(.wRook) => {
-            const k_rights: u4 = if(from == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
-            const q_rigths = if(from == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
+    if((self.castle_rights & 0x3) > 0 and team_piece_idx == PieceBitboardIdx.toInt(.wRook)){
+            const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and from == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x2) > 0 and from == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-        },
-        PieceBitboardIdx.toInt(.bRook) => {
-            const k_rights: u4 = if(from == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
-            const q_rigths = if(from == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
+            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+    }else if((self.castle_rights & 0xC) > 0 and team_piece_idx == PieceBitboardIdx.toInt(.bRook)){
+            const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and from == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x8) > 0 and from == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-        },
-        else => {},
+            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
     }
 
-    switch (enemy_piece_idx) {
-        PieceBitboardIdx.toInt(.wRook) => {
-            const k_rights: u4 = if(to == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
-            const q_rigths = if(to == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
+    if((self.castle_rights & 0x3) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.wRook)){
+            const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and from == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x2) > 0 and from == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-        },
-        PieceBitboardIdx.toInt(.bRook) => {
-            const k_rights: u4 = if(to == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
-            const q_rigths = if(to == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
+            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+    }else if((self.castle_rights & 0xC) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.bRook)){
+            const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and from == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x8) > 0 and from == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-        },
-        else => {}
+            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
     }
-    
+
     self.ply += 1;
     self.bitboards[PieceBitboardIdx.toInt(.all)] = self.bitboards[team_color_idx.toInt()] | self.bitboards[enemy_color_idx.toInt()];
     self.empty = ~self.bitboards[PieceBitboardIdx.toInt(.all)];
     self.to_play = self.to_play.change();
+    self.key ^= zobristHash.side_keys[@intFromEnum(self.to_play)];
 }
 
 pub fn unmakeMove2(self: *Self, move: Move) void{

@@ -22,7 +22,7 @@ const PvLine = struct{
 
 fn qsearch(board: *Board) i32{
 
-    const move_list = board.generateMoves();
+    var move_list = board.generateMoves();
 
     if(move_list.count == 0){
         if(board.isKingInCheck(board.to_play, board.bitboards[14])){
