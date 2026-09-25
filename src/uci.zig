@@ -172,9 +172,9 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
     var btime: i32 = std.math.maxInt(i32);
 
-    const winc: i32 = std.math.maxInt(i32);
+    var winc: i32 = std.math.maxInt(i32);
 
-    const binc: i32 = std.math.maxInt(i32);
+    var binc: i32 = std.math.maxInt(i32);
 
     const movetime: u32 = 0;
 
@@ -202,6 +202,20 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
             }            
         }
+        if(mem.eql(u8, arg, "winc")){
+            if(tokens.next()) |wi|{
+
+                winc = std.fmt.parseInt(i32, wi, 10) catch unreachable;
+
+            }            
+        }
+        if(mem.eql(u8, arg, "binc")){
+            if(tokens.next()) |bi|{
+
+                binc = std.fmt.parseInt(i32, bi, 10) catch unreachable;
+
+            }            
+        }  
     }
     
     const move = search.getBestMove(self.io,
