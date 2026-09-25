@@ -45,7 +45,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
         .moves = undefined,
     };
 
-    if(board.isThreeFoldRepetition() or board.isFiftyMoveRule()){
+    if(board.isThreefoldRepetition() or board.isFiftyMoveRule()){
         return 0;
     }
 

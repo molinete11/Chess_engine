@@ -21,6 +21,8 @@ fn generatePieceKeys() [12][64]u64{
 }
 
 fn generateRandoms(N: comptime_int) [N]u64{
+
+    @setEvalBranchQuota(20000000);
     var isaac = std.Random.Isaac64.init(0xFF21AC00);
     const prgn = isaac.random();
 

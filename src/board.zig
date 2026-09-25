@@ -259,8 +259,14 @@ inline fn clearBoard(self: *Self) void{
 pub fn isThreefoldRepetition(self: *Self) bool{ // incomplete
 
     var n: u32 = 0;
+    
+    if(self.halfmove_clock <= 2){
+        return false;
+    }
 
-    for(1..self.halfmove_clock) |i|{ 
+    var i: u32 = 2;
+
+    while(i < self.halfmove_clock): (i += 2){
         if(self.position_history[self.ply - i].key == self.key){
             n += 1;
         }
@@ -309,7 +315,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
     self.bitboard_idx[to_rank][to_file] = team_piece_idx;
     self.bitboard_idx[from_rank][from_file] = 15;
     if(self.en_passant_sq != 0){
-        self.key ^= zobristHash.keys[self.en_passant_sq & 7];
+        self.key ^= zobristHash.ep_file[self.en_passant_sq & 7];
     }
     self.en_passant_sq = 0;
 
