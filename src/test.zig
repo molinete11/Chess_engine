@@ -1,8 +1,19 @@
 const std = @import("std");
 const Board = @import("board.zig");
+const Uci = @import("uci.zig");
 const perft = @import("perft.zig").start;
 
 const expect = std.testing.expect;
+
+test "threefold repetition" {
+    var board = Board.init();
+
+    const moves  = [_][]const u8{"e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6", "c3b1", "c6b8", "b1c3", "b8c6", "c3b1", "c6b8", "b1c3", "b8c6", "c3b1", "c6b8"};
+
+    for(moves) |move|{
+        board.playStringMove(move);
+    }
+}
 
 test "perft" {
 

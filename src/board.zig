@@ -1190,3 +1190,22 @@ fn storePieceMoves(move_list: *MoveList, piece_info: PieceStoreMoveInfo) void{
     }
 }
 
+pub fn playStringMove(board: *Self, move_string: []const u8) void{ // no funcionara si es promocion
+    const move_list = board.generateMoves();
+
+    const fileFrom: u10 = move_string[0] - 'a';
+    const rankFrom: u10 = move_string[1] - '1';
+    const from: u10 = rankFrom * 8 + fileFrom;
+
+    const fileTo: u10 = move_string[2] - 'a';
+    const rankTo: u10 = move_string[3] - '1';
+    const to: u10 = rankTo * 8 + fileTo;
+
+    var m = Move.New(@intCast(from), @intCast(to), .quietMove);
+
+    for(move_list.moves) |move|{{
+        if(m.from() == move.from() and m.to() == move.to()){
+            board.makeMove2(move);
+        }
+    }}
+}

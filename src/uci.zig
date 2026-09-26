@@ -391,6 +391,39 @@ pub fn moveToUcimove(move: Move) []u8{
     }
 }
 
-pub fn ucimove_to_move(move: []const u8) void{
-    _ = move;
+pub fn ucimove_to_move(args: []const u8) Move{
+
+    const fileFrom: u10 = args[0] - 'a';
+    const rankFrom: u10 = args[1] - '1';
+    const from: u10 = rankFrom * 8 + fileFrom;
+
+    const fileTo: u10 = args[2] - 'a';
+    const rankTo: u10 = args[3] - '1';
+    const to: u10 = rankTo * 8 + fileTo;
+
+    var m = Move.New(@intCast(from), @intCast(to), .quietMove);
+
+    const isPromotion: bool = if(args.len == 5) true else false;
+
+    const capture: i32 = from - to;
+
+    if(isPromotion and capture != 8 or capture != -8){
+        switch (args[4]) {
+            'n' => {m.setFlag(Move.Flags.toInt(.knightPromotionCapture));},
+            'b' => {m.setFlag(Move.Flags.toInt(.bishopPromotionCapture));},
+            'r' => {m.setFlag(Move.Flags.toInt(.rookPromotionCapture));},
+            'q' => {m.setFlag(Move.Flags.toInt(.queenPromotionCapture));},
+            else => {}
+        }
+    }else if(isPromotion){
+        switch (args[4]) {
+            'n' => {m.setFlag(Move.Flags.toInt(.knightPromotion));},
+            'b' => {m.setFlag(Move.Flags.toInt(.bishopPromotion));},
+            'r' => {m.setFlag(Move.Flags.toInt(.rookPromotion));},
+            'q' => {m.setFlag(Move.Flags.toInt(.queenPromotion));},
+            else => {}
+        } 
+    }
+
+    return m;
 }
