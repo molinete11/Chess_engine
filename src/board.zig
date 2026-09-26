@@ -498,13 +498,13 @@ pub fn makeMove2(self: *Self, move: Move) void{
     }
 
     if((self.castle_rights & 0x3) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.wRook)){
-            const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and from == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
-            const q_rigths = if((self.castle_rights & 0x2) > 0 and from == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
+            const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and to == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x2) > 0 and to == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
             self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
     }else if((self.castle_rights & 0xC) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.bRook)){
-            const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and from == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
-            const q_rigths = if((self.castle_rights & 0x8) > 0 and from == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
+            const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and to == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
+            const q_rigths = if((self.castle_rights & 0x8) > 0 and to == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
             self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
     }
