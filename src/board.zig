@@ -512,6 +512,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
     self.ply += 1;
     self.bitboards[PieceBitboardIdx.toInt(.all)] = self.bitboards[team_color_idx.toInt()] | self.bitboards[enemy_color_idx.toInt()];
     self.empty = ~self.bitboards[PieceBitboardIdx.toInt(.all)];
+    self.key ^= zobristHash.side_keys[@intFromEnum(self.to_play)];
     self.to_play = self.to_play.change();
     self.key ^= zobristHash.side_keys[@intFromEnum(self.to_play)];
 }
