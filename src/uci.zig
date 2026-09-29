@@ -107,6 +107,9 @@ fn printBoard(self: *Self) !void{
         try self.writer.print("  ----------------------------------------------\n", .{});
         rank -%= 1;
     }
+
+    try self.writer.print("fen: {s}\n", .{self.board.getFen()});
+    try self.writer.print("key: 0x{X}\n", .{self.board.key});
 }
 
 fn getPieceSymbol(self: *Self, piece: u64) u8{
@@ -172,9 +175,9 @@ fn parseGo(self: *Self, args: []const u8) !void{
 
     var btime: i32 = std.math.maxInt(i32);
 
-    const winc: i32 = std.math.maxInt(i32);
+    var winc: i32 = std.math.maxInt(i32);
 
-    const binc: i32 = std.math.maxInt(i32);
+    var binc: i32 = std.math.maxInt(i32);
 
     const movetime: u32 = 0;
 
@@ -190,16 +193,24 @@ fn parseGo(self: *Self, args: []const u8) !void{
         }
         if(mem.eql(u8, arg, "wtime")){
             if(tokens.next()) |wt|{
-
                 wtime = std.fmt.parseInt(i32, wt, 10) catch unreachable;
-    
             }
         }
         if(mem.eql(u8, arg, "btime")){
             if(tokens.next()) |bt|{
-
                 btime = std.fmt.parseInt(i32, bt, 10) catch unreachable;
+            }            
+        }
 
+        if(mem.eql(u8, arg, "winc")){
+            if(tokens.next()) |wi|{
+                winc = std.fmt.parseInt(i32, wi, 10) catch unreachable;
+            }            
+        }
+
+        if(mem.eql(u8, arg, "binc")){
+            if(tokens.next()) |bi|{
+                binc = std.fmt.parseInt(i32, bi, 10) catch unreachable;
             }            
         }
     }
@@ -372,6 +383,39 @@ pub fn moveToUcimove(move: Move) []u8{
     }
 }
 
-pub fn ucimove_to_move(move: []const u8) void{
-    _ = move;
+pub fn ucimove_to_move(args: []const u8) Move{
+
+    const fileFrom: u10 = args[0] - 'a';
+    const rankFrom: u10 = args[1] - '1';
+    const from: u10 = rankFrom * 8 + fileFrom;
+
+    const fileTo: u10 = args[2] - 'a';
+    const rankTo: u10 = args[3] - '1';
+    const to: u10 = rankTo * 8 + fileTo;
+
+    var m = Move.New(@intCast(from), @intCast(to), .quietMove);
+
+    const isPromotion: bool = if(args.len == 5) true else false;
+
+    const capture: i32 = from - to;
+
+    if(isPromotion and capture != 8 or capture != -8){
+        switch (args[4]) {
+            'n' => {m.setFlag(Move.Flags.toInt(.knightPromotionCapture));},
+            'b' => {m.setFlag(Move.Flags.toInt(.bishopPromotionCapture));},
+            'r' => {m.setFlag(Move.Flags.toInt(.rookPromotionCapture));},
+            'q' => {m.setFlag(Move.Flags.toInt(.queenPromotionCapture));},
+            else => {}
+        }
+    }else if(isPromotion){
+        switch (args[4]) {
+            'n' => {m.setFlag(Move.Flags.toInt(.knightPromotion));},
+            'b' => {m.setFlag(Move.Flags.toInt(.bishopPromotion));},
+            'r' => {m.setFlag(Move.Flags.toInt(.rookPromotion));},
+            'q' => {m.setFlag(Move.Flags.toInt(.queenPromotion));},
+            else => {}
+        } 
+    }
+
+    return m;
 }
