@@ -30,8 +30,12 @@ pub inline fn New(src: u6, dst: u6, f: Flags)
             Self
 {
     return .{
-        .fromToFlags = src | (@as(u12, dst) << 6) | (@as(u16, @intFromEnum(f)) << 12),
+        .fromToFlags = src | (@as(u12, dst) << 6) | (@as(u16, f.toInt()) << 12),
     };    
+}
+
+pub inline fn setFlag(self: *Self, f: u4) void{
+    self.fromToFlags |= @as(u16, f) << 12;
 }
 
 pub inline fn from(self: Self) u6{
