@@ -256,22 +256,32 @@ inline fn clearBoard(self: *Self) void{
     self.to_play = .white;
 }
 
-pub fn isThreefoldRepetition(self: *Self) bool{ // incomplete
 
-    var n: u32 = 0;
+
+pub fn isThreefoldRepetition(self: *Self) bool{
+
+    var n: u32 = 1;
     
-    if(self.halfmove_clock <= 2){
+    if(self.halfmove_clock < 4){
         return false;
     }
 
-    var i: u32 = 2;
+// en caso de pasar por fen el reloj de halfmove puede estar avanzado por ello esto self.position_history[self.ply - i]; puede dar subflow
+// para evitarlo se escoge el menor entre self.halfmove_clock y self.ply
+    const halfmove_clock: u32 = @min(self.halfmove_clock, self.ply); 
 
-    while(i < self.halfmove_clock): (i += 2){
-        if(self.position_history[self.ply - i].key == self.key){
+    var i: u32 = 2;
+    //std.debug.print("{}\n", .{self.key});
+
+    while(i <= halfmove_clock): (i += 2){
+
+        const undo = self.position_history[self.ply - i];
+
+        if(undo.key == self.key){
             n += 1;
         }
-
-        if(n == 3){
+    
+        if(n >= 3){
             return true;
         }
     }
@@ -397,7 +407,6 @@ pub fn makeMove2(self: *Self, move: Move) void{
 
                 self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_from];
                 self.key ^= zobristHash.keys[team_rook_idx.toInt()][sq_to];
-
 
                 const white: u4 = if(self.isWhiteToPlay()) 0 else 2;
 

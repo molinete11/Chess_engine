@@ -193,32 +193,24 @@ fn parseGo(self: *Self, args: []const u8) !void{
         }
         if(mem.eql(u8, arg, "wtime")){
             if(tokens.next()) |wt|{
-
                 wtime = std.fmt.parseInt(i32, wt, 10) catch unreachable;
-    
             }
         }
         if(mem.eql(u8, arg, "btime")){
             if(tokens.next()) |bt|{
-
                 btime = std.fmt.parseInt(i32, bt, 10) catch unreachable;
-
             }            
         }
 
         if(mem.eql(u8, arg, "winc")){
             if(tokens.next()) |wi|{
-
                 winc = std.fmt.parseInt(i32, wi, 10) catch unreachable;
-
             }            
         }
 
         if(mem.eql(u8, arg, "binc")){
             if(tokens.next()) |bi|{
-
                 binc = std.fmt.parseInt(i32, bi, 10) catch unreachable;
-
             }            
         }
     }

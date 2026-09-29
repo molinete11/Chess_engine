@@ -126,9 +126,7 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) SearchResult
     var current_best_move = std.mem.zeroes(Move);
     var current_best_move_eval: i32 = std.math.minInt(i32);
 
-    var time_spend_between_plys: i64 = 0;
-
-    
+    var time_spend_between_plys: i64 = 0; 
 
     for(0..depth)|c_depth|{
         var total_nodes: u64 = 0;
@@ -203,24 +201,24 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) SearchResult
         }
 
         if(time_allocated <= 0){
-            std.debug.print("not finished, best move found {s} eval {}\n", .{
-                uci.moveToUcimove(current_best_move),
-                current_best_move_eval});
+            //std.debug.print("not finished, best move found {s} eval {}\n", .{
+            //    uci.moveToUcimove(current_best_move),
+            //    current_best_move_eval});
             break;
         }else{
-            std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {} tot nodes {}\n", .{
-                time_spend_between_plys, 
-                time_allocated, 
-                c_depth,
-                uci.moveToUcimove(current_ply_best_move),
-                current_ply_best_move_eval,
-                total_nodes});
+            //std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {} tot nodes {}\n", .{
+            //    time_spend_between_plys, 
+            //    time_allocated, 
+            //    c_depth,
+            //    uci.moveToUcimove(current_ply_best_move),
+            //    current_ply_best_move_eval,
+            //    total_nodes});
 
-            for(0..main_pv_line.count) |j|{
-                std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
-            }
+            //for(0..main_pv_line.count) |j|{
+            //    std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
+            //}
 
-            std.debug.print("\n", .{});
+            //std.debug.print("\n", .{});
         }
 
         current_best_move = current_ply_best_move;
@@ -239,36 +237,9 @@ fn moveOrdering(move_list: *MoveList) void{
     var i: usize = 0;
 
     for(i+1..move_list.count) |j|{
-
-        if(move_list.moves[j].isPromotion()){
-
-            const tmp = move_list.moves[i];
-
-            move_list.moves[i] = move_list.moves[j];
-            move_list.moves[j] = tmp;
-
-            i += 1;
-        }
-    }
-
-    for(i+1..move_list.count) |j|{
         const move = move_list.moves[j];
 
-        if(move.flag() == .capture){
-
-            const tmp = move_list.moves[i];
-
-            move_list.moves[i] = move_list.moves[j];
-            move_list.moves[j] = tmp;
-
-            i += 1;
-        }
-    }
-
-    for(i+1..move_list.count) |j|{
-        const move = move_list.moves[j];
-
-        if(move.flag() == .queenSideCastle or move.flag() == .kingSideCastle){
+        if(move.isCapture() or move.isEnPassantCapture()){
 
             const tmp = move_list.moves[i];
 

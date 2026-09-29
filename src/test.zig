@@ -4,6 +4,7 @@ const Uci = @import("uci.zig");
 const perft = @import("perft.zig").start;
 
 const expect = std.testing.expect;
+const expectEqual = std.testing.expectEqual;
 
 test "threefold repetition" {
     var board = Board.init();
@@ -13,7 +14,12 @@ test "threefold repetition" {
     for(moves) |move|{
         board.playStringMove(move);
     }
+
+    try expectEqual(0xbfef20101020efbf, board.bitboards[14]);
+    try expectEqual(14, board.halfmove_clock);
+    try expectEqual(true, board.isThreefoldRepetition());
 }
+
 
 test "perft" {
 
