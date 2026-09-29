@@ -1,3 +1,0 @@
-
-
-Bug encontrado, haciendo perft con
