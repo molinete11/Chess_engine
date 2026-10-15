@@ -237,8 +237,14 @@ fn parseGo(self: *Self, args: []const u8) !void{
                         winc, 
                         binc, 
                         movetime); 
+
+    if(move) |m|{
+        try self.writer.print("bestmove {s}\n", .{m});
+    }else{
+        try self.writer.print("bestmove null\n", .{});
+    }
     
-    try self.writer.print("bestmove {s}\n", .{move});
+    
                         
 }
 
@@ -260,7 +266,7 @@ fn parseMove(self: *Self, args: []const u8) void{
 
     for(0..moves.count) |i|{
         if(from == moves.moves[i].from() and to == moves.moves[i].to() and !isPromotion){
-            self.board.makeMove2(moves.moves[i]);
+            _  = self.board.makeMove2(moves.moves[i]);
             illegal = false;
             break;
         }else if(from == moves.moves[i].from() and to == moves.moves[i].to() and isPromotion){
@@ -281,16 +287,16 @@ fn parseMove(self: *Self, args: []const u8) void{
         for(0..promotionCount) |i|{
             if(args[4] == 'q' and (moves.moves[promotionsAvailable[i]].flag() == .queenPromotion or 
                                     moves.moves[promotionsAvailable[i]].flag() == .queenPromotionCapture)){
-                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
             }else if(args[4] == 'r' and (moves.moves[promotionsAvailable[i]].flag() == .rookPromotion or 
                                     moves.moves[promotionsAvailable[i]].flag() == .rookPromotionCapture)){
-                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);                        
+                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);                        
             }else if(args[4] == 'n' and (moves.moves[promotionsAvailable[i]].flag() == .knightPromotion or 
                                     moves.moves[promotionsAvailable[i]].flag() == .knightPromotionCapture)){
-                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
             }else if(args[4] == 'b' and (moves.moves[promotionsAvailable[i]].flag() == .bishopPromotion or 
                                     moves.moves[promotionsAvailable[i]].flag() == .bishopPromotionCapture)){
-                self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
             }
         }
     }

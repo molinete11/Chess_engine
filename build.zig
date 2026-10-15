@@ -21,11 +21,11 @@ pub fn build(b: *std.Build) void{
 
     const exe = b.addExecutable(.{
             .name = "Muu",
+            .use_llvm = true,
             .root_module = b.createModule(.{ 
                 .root_source_file = b.path("src/main.zig"),
                 .target = b.graph.host,
                 .optimize = optimize,
-                .single_threaded = true,
             }),
         });
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const lookup_tables = @import("lookupTables.zig");
+const lookup_tables = @import("lot.zig");
 const bit_set = @import("bitSet.zig");
 const Move = @import("move.zig");
 const MoveList = @import("moveList.zig");
@@ -13,6 +13,14 @@ pub const Side = enum(u1) {
 
     pub fn change(self: @This()) @This(){
         return if(self == .white) .black else .white;
+    }
+
+    pub fn toInt(self: @This()) u1{
+        return @backingInt(self);
+    }
+
+    pub fn enemy(self: @This()) @This(){
+        return @fromBackingInt(self.toInt() ^ 1);
     }
 };
 
@@ -293,7 +301,7 @@ pub fn isFiftyMoveRule(self: *Self) bool{
     return self.halfmove_clock >= 100;
 }
 
-pub fn makeMove2(self: *Self, move: Move) void{
+pub fn makeMove2(self: *Self, move: Move) bool{
 
     const from = move.from();
     const to = move.to();
@@ -354,7 +362,7 @@ pub fn makeMove2(self: *Self, move: Move) void{
                 const ep_sqU64 = (@as(u64, 1) << (to +% @as(u6, @bitCast(offset))));
                 const enemy_pawn_piece_idx: PieceBitboardIdx = if(self.isWhiteToPlay()) .bPawn else .wPawn;
                 self.bitboard_idx[from_rank][to_file] = 15;
-                self.key ^= zobristHash.keys[enemy_piece_idx][@ctz(ep_sqU64)];
+                self.key ^= zobristHash.keys[enemy_pawn_piece_idx.toInt()][@ctz(ep_sqU64)];
                 self.halfmove_clock = 0;
 
                 self.position_history[self.ply].capture = enemy_pawn_piece_idx.toInt();
@@ -498,33 +506,40 @@ pub fn makeMove2(self: *Self, move: Move) void{
             const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and from == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
             const q_rigths = if((self.castle_rights & 0x2) > 0 and from == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+            self.key ^= if(@ctz(~(k_rights & q_rigths)) < 4) zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))] else 0;
     }else if((self.castle_rights & 0xC) > 0 and team_piece_idx == PieceBitboardIdx.toInt(.bRook)){
             const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and from == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
             const q_rigths = if((self.castle_rights & 0x8) > 0 and from == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+            self.key ^= if(@ctz(~(k_rights & q_rigths)) < 4) zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))] else 0;
     }
 
     if((self.castle_rights & 0x3) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.wRook)){
             const k_rights: u4 = if((self.castle_rights & 0x1) > 0 and to == 7) ~@as(u4, 0x1) else ~@as(u4, 0);
             const q_rigths = if((self.castle_rights & 0x2) > 0 and to == 0) ~@as(u4, 0x2) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+            self.key ^=  if(@ctz(~(k_rights & q_rigths)) < 4) zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))] else 0;
     }else if((self.castle_rights & 0xC) > 0 and enemy_piece_idx == PieceBitboardIdx.toInt(.bRook)){
             const k_rights: u4 = if((self.castle_rights & 0x4) > 0 and to == 63) ~@as(u4, 0x4) else ~@as(u4, 0);
             const q_rigths = if((self.castle_rights & 0x8) > 0 and to == 56) ~@as(u4, 0x8) else ~@as(u4, 0);
             self.castle_rights &= k_rights & q_rigths;
-            self.key ^= zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))];
+            self.key ^= if(@ctz(~(k_rights & q_rigths)) < 4) zobristHash.castling_rights[@ctz(~(k_rights & q_rigths))] else 0;
     }
 
     self.ply += 1;
     self.bitboards[PieceBitboardIdx.toInt(.all)] = self.bitboards[team_color_idx.toInt()] | self.bitboards[enemy_color_idx.toInt()];
     self.empty = ~self.bitboards[PieceBitboardIdx.toInt(.all)];
+
     self.key ^= zobristHash.side_keys[@intFromEnum(self.to_play)];
     self.to_play = self.to_play.change();
     self.key ^= zobristHash.side_keys[@intFromEnum(self.to_play)];
-}
+
+    if(self.isKingInCheck(self.to_play.enemy(), self.bitboards[PieceBitboardIdx.toInt(.all)])){
+        self.unmakeMove2(move);
+        return false;
+    }
+    return true;
+}   
 
 pub fn unmakeMove2(self: *Self, move: Move) void{
     self.ply -= 1;
@@ -651,17 +666,13 @@ pub fn generateMoves(self: *Self) MoveList{
     const kingSquare: u6 = @intCast(@ctz(king));
 
     const enemyAttacks: u64 = self.getAttackSet(if(self.to_play == .white) Side.black else Side.white, occ ^ pieces[5]);
-
-    //std.log.debug("{}\n", .{enemyAttacks});
-
-    const is_king_in_check: bool = (king & enemyAttacks) > 0;
   
-    const kingMoves: u64 = lookup_tables.getKingMoves(kingSquare) & ~(enemyAttacks | team);
+    const kingMoves: u64 = lookup_tables.getKingMoveSet(kingSquare).mask & ~(enemyAttacks | team);
 
-    const pawnAttacks: u64 = lookup_tables.getPawnAtt(kingSquare, @intFromEnum(self.to_play));
-    const bishopRays: u64 = lookup_tables.getBishopMoves(kingSquare, occ);
-    const kgniht_attacks: u64 = lookup_tables.getKnightMoves(kingSquare);
-    const rookRays: u64 = lookup_tables.getRookMoves(kingSquare, occ);
+    const pawnAttacks: u64 = lookup_tables.getPawnAttackSet(kingSquare, @intFromEnum(self.to_play)).mask;
+    const bishopRays: u64 = lookup_tables.getBishopMoveSet(kingSquare, occ).mask;
+    const kgniht_attacks: u64 = lookup_tables.getKnightMoveSet(kingSquare).mask;
+    const rookRays: u64 = lookup_tables.getRookMoveSet(kingSquare, occ).mask;
 
     const potentialPawnAttackers: u64 = pawnAttacks & enemyPieces[0];
     const potentialBishopAttackers: u64 = bishopRays & (enemyPieces[1] | enemyPieces[4]);
@@ -683,153 +694,55 @@ pub fn generateMoves(self: *Self) MoveList{
         return move_list;
     }
 
-    var potential_pinned_pieces: u64 = rookRays & team;
-
-    var rqAttackers: u64 = lookup_tables.getRookMask(kingSquare) & (enemyPieces[4] | enemyPieces[3]);
-    var pinnedPiecesMask: u64 = 0;
-
-    while(rqAttackers > 0):(rqAttackers = bit_set.popLstb(rqAttackers)){
-        pinnedPiecesMask |= lookup_tables.getRookMoves(@ctz(rqAttackers), occ) & potential_pinned_pieces;
-    }
-
-    potential_pinned_pieces = bishopRays & team;
-    var bqAttackers: u64 = lookup_tables.getBishopMask(kingSquare) & (enemyPieces[4] | enemyPieces[1]);
-
-    while(bqAttackers > 0):(bqAttackers = bit_set.popLstb(bqAttackers)){
-        pinnedPiecesMask |= lookup_tables.getBishopMoves(@ctz(bqAttackers), occ) & potential_pinned_pieces;
-    }
-
-    const pawns_not_pinned: u64 = pieces[0] & ~pinnedPiecesMask;
-    const bishops_not_pinned: u64 = pieces[1] & ~pinnedPiecesMask;
-    const knights_not_pinned: u64 = pieces[2] & ~pinnedPiecesMask;
-    const rooks_not_pinned: u64 = pieces[3] & ~pinnedPiecesMask;
-    const queens_not_pinned: u64 = pieces[4] & ~pinnedPiecesMask;
-
-    const pawns_pinned: u64 = pieces[0] & pinnedPiecesMask;
-    const bishop_pinned: u64 = pieces[1] & pinnedPiecesMask;
-    const rooks_pinned: u64 = pieces[3] & pinnedPiecesMask;
-    const queens_pinned: u64 = pieces[4] & pinnedPiecesMask;
-
     var move_set_list: MoveSetList = .{
         .count = 0,
         .from = undefined,
         .moveSets = undefined,
     };
 
-    var bishops: u64 = bishops_not_pinned;
-    var knights: u64 = knights_not_pinned;
-    var rooks: u64 = rooks_not_pinned;
-    var queens: u64 = queens_not_pinned;
+    const pawns = pieces[0];
+    var bishops: u64 = pieces[1];
+    var knights: u64 = pieces[2];
+    var rooks: u64 = pieces[3];
+    var queens: u64 = pieces[4];
 
-    var bishops_p = bishop_pinned & bishopRays;
-    var rooks_p = rooks_pinned & rookRays;
-    var queens_pb = queens_pinned & bishopRays;
-    var queens_pr = queens_pinned & rookRays;
-
-    var mask: u64 = 0;
-    var check: bool = false;
 
     while(bishops > 0): (bishops = bit_set.popLstb(bishops)){
-        move_set_list.add(lookup_tables.getBishopMoves(@ctz(bishops), occ), @intCast(@ctz(bishops)));
+        move_set_list.add(lookup_tables.getBishopMoveSet(@intCast(@ctz(bishops)), occ).mask, @intCast(@ctz(bishops)));
     }
 
     while(knights > 0): (knights = bit_set.popLstb(knights)){
-        move_set_list.add(lookup_tables.getKnightMoves(@ctz(knights)), @intCast(@ctz(knights)));
+        move_set_list.add(lookup_tables.getKnightMoveSet(@intCast(@ctz(knights))).mask, @intCast(@ctz(knights)));
     }
 
     while(rooks > 0): (rooks = bit_set.popLstb(rooks)){
-        move_set_list.add(lookup_tables.getRookMoves(@ctz(rooks), occ), @intCast(@ctz(rooks)));
-    }
+        move_set_list.add(lookup_tables.getRookMoveSet(@intCast(@ctz(rooks)), occ).mask, @intCast(@ctz(rooks)));
+    }   
 
     while(queens > 0): (queens = bit_set.popLstb(queens)){
-        move_set_list.add(lookup_tables.getQueenMoves(@ctz(queens), occ), @intCast(@ctz(queens)));
+        move_set_list.add(lookup_tables.getQueenMoveSet(@intCast(@ctz(queens)), occ).mask, @intCast(@ctz(queens)));
     }
 
-    if(!is_king_in_check){
-        mask = ~team;
-        const ghost_bishop = lookup_tables.getBishopMask(kingSquare);
-
-        while(bishops_p > 0): (bishops_p = bit_set.popLstb(bishops_p)){
-            const bishopMoves: u64 = lookup_tables.getBishopMoves(@ctz(bishops_p), occ) & ghost_bishop;
-            move_set_list.add(bishopMoves, @intCast(@ctz(bishops_p)));
-        }
-
-        while(rooks_p > 0): (rooks_p = bit_set.popLstb(rooks_p)){
-            const rookMoves: u64 = lookup_tables.getRookMoves(@ctz(rooks_p), occ) & lookup_tables.getRookMask(kingSquare);
-            move_set_list.add(rookMoves, @intCast(@ctz(rooks_p)));
-        }
-
-        while(queens_pb > 0): (queens_pb = bit_set.popLstb(queens_pb)){
-            const queen_moves: u64 = lookup_tables.getBishopMoves(@ctz(queens_pb), occ) & ghost_bishop;
-            move_set_list.add(queen_moves, @intCast(@ctz(queens_pb)));
-        }
-
-        while(queens_pr > 0): (queens_pr = bit_set.popLstb(queens_pr)){
-            const queen_moves: u64 = lookup_tables.getRookMoves(@ctz(queens_pr), occ) & lookup_tables.getRookMask(kingSquare);
-            move_set_list.add(queen_moves, @intCast(@ctz(queens_pr)));
-        }
-    }else{
-        check = true;
-
-        if(potentialPawnAttackers != 0 or potentialKnightAttackers != 0){
-            mask = potentialPawnAttackers | potentialKnightAttackers;
-        }else if(potentialBishopAttackers != 0){
-            mask = (lookup_tables.getBishopMoves(@ctz(potentialBishopAttackers), occ) & bishopRays) | potentialBishopAttackers;
-        }else if(potentialRookAttackers != 0){
-            mask = (lookup_tables.getRookMoves(@ctz(potentialRookAttackers), occ) & rookRays) | potentialRookAttackers;
-        }
+    for(0..move_set_list.count)|i|{
+        move_set_list.moveSets[i] &= ~team;
     }
-
-    for(0..move_set_list.count) |i|{
-        move_set_list.moveSets[i] &= mask;
-    }
-
-    const enPassant = self.getEnPassantSquare(
-                    pawns_not_pinned | (pawns_pinned & bishopRays),  
-                    king);
 
     self.generatePawnMoves2(&move_list, 
-                        pawns_not_pinned, 
+                        pawns, 
                         .{
-                            .legalSquares = mask & ~enemy,
-                            .legalCaptures = mask & enemy,
+                            .legalSquares =  ~(enemy | team),
+                            .legalCaptures =  enemy,
                             .from = 0,
                         }, 
-                        enPassant, 
+                        @as(u64, 1) << self.en_passant_sq, 
                         ~occ);
-    
-    if(!check){
-        self.generateKingCastleMoves(&move_list, 
+
+    self.generateKingCastleMoves(&move_list, 
                                         kingSquare, 
                                         enemyAttacks, 
                                         team, enemy
                                         );
-
-        if(pawns_pinned > 0){
-            self.generatePawnMoves2( // the pawns that are behind and in front of the king and are pinned can't capture, this only generate those moves
-                &move_list, 
-                (pawns_pinned & ~(@as(u64, 0xFF) << ((kingSquare >> 3) * 8))) & lookup_tables.getRookMask(kingSquare), 
-                .{
-                    .legalSquares = mask & lookup_tables.getRookMask(kingSquare),
-                    .legalCaptures = 0,
-                    .from = 0,
-                }, 
-                0,
-                ~occ);
-
-            self.generatePawnMoves2( //this generates the pawns that are pinned by a bishop
-                &move_list, 
-                pawns_pinned & bishopRays, 
-                .{
-                    .legalSquares = 0,
-                    .legalCaptures = lookup_tables.getBishopMask(kingSquare) & (enemyPieces[4] | enemyPieces[1]),
-                    .from = 0,
-                }, 
-                enPassant & lookup_tables.getBishopMask(kingSquare),
-                ~occ);
-        }
-
-    }
+    
 
     storePieceMoves(&move_list, .{
             .legalSquares = kingMoves & ~enemy,
@@ -838,8 +751,6 @@ pub fn generateMoves(self: *Self) MoveList{
     });
 
     for(0..move_set_list.count) |i|{
-        if(move_set_list.moveSets[i] == 0) continue;
-
         const moveset = move_set_list.moveSets[i];
 
         storePieceMoves(&move_list, .{
@@ -852,98 +763,6 @@ pub fn generateMoves(self: *Self) MoveList{
     return move_list;
 }
 
-fn updateFlag(self: *Self) void{
-    const occ = self.bitboards[@intFromEnum(PieceBitboardIdx.all)];
-
-    const color_enemy = if(self.isWhiteToPlay()) PieceBitboardIdx.black else PieceBitboardIdx.white;
-
-    const king_bitboard = if(self.isWhiteToPlay()) self.bitboards[@intFromEnum(PieceBitboardIdx.wKing)] else self.bitboards[@intFromEnum(PieceBitboardIdx.bKing)];
-
-    const king_attackers = self.getSquareAttackers(bit_set.getLstbIdx(king_bitboard), color_enemy, occ);
-
-    var king_moves = lookup_tables.getKingMoves(@ctz(king_bitboard));
-
-    var king_moves_copy = king_moves;
-
-    while(king_moves_copy > 0): (king_moves_copy = bit_set.popLstb(king_moves_copy)){
-        if(self.isSquareAttacked(@intCast(@ctz(king_moves_copy)), 
-                                    color_enemy, 
-                                    occ ^ king_bitboard)){
-            king_moves = bit_set.popBit(king_moves, @ctz(king_moves_copy));
-        }
-    }
-
-    if(king_moves == 0){
-        if(@popCount(king_attackers) > 1){
-            self.flags = .checkmate; return;
-        }else if(@popCount(king_attackers) == 1){
-            // TODO: see if attacker is capturable
-
-            const king_defenders = self.getSquareAttackers(bit_set.getLstbIdx(king_attackers), self.to_play, occ);
-
-            if(@popCount(king_defenders) == 0){
-                self.flags = .checkmate; return;
-            }
-
-
-        }
-
-
-        // TODO: see if there are potential legal moves
-
-    }
-
-    if(self.ply == 50){
-        self.flags == .fiftymove;
-        return;
-    }
-
-    var pos_history_idx: i32 = self.move_number - 3;
-
-    var current_pos_repetition: u32 = 0;
-
-    while(pos_history_idx >= 0): (pos_history_idx -= 1){
-        if(self.position_history.capture_or_pawnpush[pos_history_idx]){
-            return ;
-        }
-        
-        if(self.position_history.key[pos_history_idx]){
-            current_pos_repetition += 1;
-        }
-
-        if(current_pos_repetition == 3){
-            self.flags = .threeFoldRepetition; return;
-        }
-    }
-}
-
-fn getEnPassantSquare(self: *Self, tPawns: u64, kingSquare: u64) u64{
-    if(self.en_passant_sq != 0){
-        var enPassantAttackers = lookup_tables.getPawnAtt(self.en_passant_sq, ~@intFromEnum(self.to_play)) & tPawns;
-
-        if(@popCount(enPassantAttackers) == 0){
-            return 0;
-        }
-
-        while(enPassantAttackers > 0): (enPassantAttackers = bit_set.popLstb(enPassantAttackers)){
-
-            const move = Move.New(@intCast(@ctz(enPassantAttackers)), self.en_passant_sq, .epCapture);
-
-            self.makeMove2(move);
-
-            if(!self.isSquareAttacked(@intCast(@ctz(kingSquare)), self.to_play, self.bitboards[@intFromEnum(PieceBitboardIdx.all)])){
-                self.unmakeMove2(move);
-                return @as(u64, 1) << self.en_passant_sq;
-            }
-
-            self.unmakeMove2(move);
-        }
-
-        return 0;
-    }
-
-    return 0;
-}
 
 fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: PieceStoreMoveInfo, enPassantSquare: u64, empty: u64) void{
     var normalPush: u64 = 0;
@@ -1020,7 +839,7 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
 
     while(captures > 0): (captures = bit_set.popLstb(captures)){
         const sq: u6 = @intCast(@ctz(captures));
-        var attackers: u64 = lookup_tables.getPawnAtt(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)) & bitboard;
+        var attackers: u64 = lookup_tables.getPawnAttackSet(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)).mask & bitboard;
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){
             moveList.add(
                     Move.New(
@@ -1033,7 +852,7 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
 
     if((attackSet & enPassantSquare) > 0){
         const sq: u6 = self.en_passant_sq;
-        var attackers: u64 = lookup_tables.getPawnAtt(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)) & bitboard;
+        var attackers: u64 = lookup_tables.getPawnAttackSet(sq, @intFromEnum(self.to_play) ^ @as(u1, 1)).mask & bitboard;
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){
             moveList.add(
                     Move.New( 
@@ -1047,7 +866,7 @@ fn generatePawnMoves2(self: *Self, moveList: *MoveList, bitboard: u64, genInfo: 
 
     while(promotionsWithCapture > 0): (promotionsWithCapture = bit_set.popLstb(promotionsWithCapture)){
         const sq: u6 = @intCast(@ctz(promotionsWithCapture));
-        var attackers: u64 = lookup_tables.getPawnAtt(sq, ~@intFromEnum(self.to_play)) & bitboard;
+        var attackers: u64 = lookup_tables.getPawnAttackSet(sq, ~@intFromEnum(self.to_play)).mask & bitboard;
         while(attackers > 0): (attackers = bit_set.popLstb(attackers)){            
             inline for(0..4) |i|{
                 moveList.add(
@@ -1114,26 +933,26 @@ fn getAttackSet(self: *Self, color: Side, occ: u64) u64 {
     //std.log.debug("{}\n", .{pawnAttacks});
 
     attackSet |= pawnAttacks;
-    attackSet |= lookup_tables.getKingMoves(@intCast(@ctz(pieces[5])));
+    attackSet |= lookup_tables.getKingMoveSet(@intCast(@ctz(pieces[5]))).mask;
 
     var bishops: u64 = pieces[1];
     while (bishops > 0) : (bishops &= bishops - 1) {
-        attackSet |= lookup_tables.getBishopMoves(@intCast(@ctz(bishops)), occ);
+        attackSet |= lookup_tables.getBishopMoveSet(@intCast(@ctz(bishops)), occ).mask;
     }
 
     var knights: u64 = pieces[2];
     while (knights > 0) : (knights &= knights - 1) {
-        attackSet |= lookup_tables.getKnightMoves(@intCast(@ctz(knights)));
+        attackSet |= lookup_tables.getKnightMoveSet(@intCast(@ctz(knights))).mask;
     }
 
     var rooks: u64 = pieces[3];
     while (rooks > 0) : (rooks &= rooks - 1) {
-        attackSet |= lookup_tables.getRookMoves(@intCast(@ctz(rooks)), occ);
+        attackSet |= lookup_tables.getRookMoveSet(@intCast(@ctz(rooks)), occ).mask;
     }
 
     var queens: u64 = pieces[4];
     while (queens > 0) : (queens &= queens - 1) {
-        attackSet |= lookup_tables.getQueenMoves(@intCast(@ctz(queens)), occ);
+        attackSet |= lookup_tables.getQueenMoveSet(@intCast(@ctz(queens)), occ).mask;
     }
 
     return attackSet;
@@ -1146,11 +965,11 @@ fn getSquareAttackers(self: *Self, square: u6, side: Side, occupancy: u64) u64{
 
     const pieces = self.bitboards[start..end];
 
-    const rqattackers: u64 = lookup_tables.getRookMoves(square, occupancy) & (pieces[3] | pieces[4]);
-    const bqattackers: u64 = lookup_tables.getBishopMoves(square, occupancy) & (pieces[1] | pieces[4]);
-    const pattackers: u64 = lookup_tables.getPawnAtt(square, @intFromEnum(side) ^ @as(u1, 1)) & pieces[0];
-    const nattackers: u64 = lookup_tables.getKnightMoves(square) & pieces[2];
-    const kattackers: u64 = lookup_tables.getKingMoves(square) & pieces[5];
+    const rqattackers: u64 = lookup_tables.getRookMoveSet(square, occupancy).mask & (pieces[3] | pieces[4]);
+    const bqattackers: u64 = lookup_tables.getBishopMoveSet(square, occupancy).mask & (pieces[1] | pieces[4]);
+    const pattackers: u64 = lookup_tables.getPawnAttackSet(square, @intFromEnum(side) ^ @as(u1, 1)).mask & pieces[0];
+    const nattackers: u64 = lookup_tables.getKnightMoveSet(square).mask & pieces[2];
+    const kattackers: u64 = lookup_tables.getKingMoveSet(square).mask & pieces[5];
 
     return rqattackers | bqattackers | pattackers | nattackers | kattackers;
 }

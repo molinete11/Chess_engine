@@ -1,6 +1,6 @@
 const std = @import("std");
 const Board = @import("board.zig");
-const lookup_tables = @import("lookupTables.zig");
+const lookup_tables = @import("lot.zig");
 const PieceBitboardIdx = Board.PieceBitboardIdx;
 
 const PAWN_VALUE: i32 = 100;
@@ -64,25 +64,25 @@ fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 
 
     var wpawns = white_pieces[0];
     while (wpawns > 0) : (wpawns &= wpawns - 1) {
-        white_pos_eval += @popCount(lookup_tables.getPawnMoves(@ctz(wpawns), 0) & ~white_pieces_occ) * activity_value;
+        white_pos_eval += @popCount(lookup_tables.getPawnMoveSet(@ctz(wpawns), 0).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += PAWNS_HEURISTICS[@ctz(wpawns)];
     }
 
     var wbishops = white_pieces[1];
     while (wbishops > 0) : (wbishops &= wbishops - 1) {
-        white_pos_eval += @popCount(lookup_tables.getBishopMoves(@ctz(wbishops), occ) & ~white_pieces_occ) * activity_value;
+        white_pos_eval += @popCount(lookup_tables.getBishopMoveSet(@ctz(wbishops), occ).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += BISHOP_HEURISTICS[@ctz(wbishops)];
     }
 
     var wknights = white_pieces[2];
     while (wknights > 0) : (wknights &= wknights - 1) {
-        white_pos_eval += @popCount(lookup_tables.getKnightMoves(@ctz(wknights)) & ~white_pieces_occ) * activity_value;
+        white_pos_eval += @popCount(lookup_tables.getKnightMoveSet(@ctz(wknights)).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += KNIGHT_HEURISTICS[@ctz(wknights)];
     }
 
     var wrooks = white_pieces[3];
     while (wrooks > 0) : (wrooks &= wrooks - 1) {
-        white_pos_eval += @popCount(lookup_tables.getRookMoves(@ctz(wrooks), occ) & ~white_pieces_occ) * activity_value;
+        white_pos_eval += @popCount(lookup_tables.getRookMoveSet(@ctz(wrooks), occ).mask & ~white_pieces_occ) * activity_value;
     }
 
 // ___________________________
@@ -91,27 +91,27 @@ fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 
 
     var bpawns = black_pieces[0];
     while (bpawns > 0) : (bpawns &= bpawns - 1) {
-        black_pos_eval += @popCount(lookup_tables.getPawnMoves(@ctz(bpawns), 0) & ~black_pieces_occ) * activity_value;
+        black_pos_eval += @popCount(lookup_tables.getPawnMoveSet(@ctz(bpawns), 0).mask & ~black_pieces_occ) * activity_value;
         const sq: u6 = @intCast((7 - ((@ctz(bpawns) >> @intCast(3)))) * 8 + (@ctz(bpawns) & 7));
         black_pos_eval += PAWNS_HEURISTICS[sq];
     }
 
     var bbishops = black_pieces[1];
     while (bbishops > 0) : (bbishops &= bbishops - 1) {
-        black_pos_eval += @popCount(lookup_tables.getBishopMoves(@ctz(bbishops), occ) & ~black_pieces_occ) * activity_value;
+        black_pos_eval += @popCount(lookup_tables.getBishopMoveSet(@ctz(bbishops), occ).mask & ~black_pieces_occ) * activity_value;
         const sq: u6 = @intCast((7 - ((@ctz(bbishops) >> @intCast(3)))) * 8 + (@ctz(bbishops) & 7));
         black_pos_eval += BISHOP_HEURISTICS[sq];
     }
 
     var bknights = black_pieces[2];
     while (bknights > 0) : (bknights &= bknights - 1) {
-        black_pos_eval += @popCount(lookup_tables.getKnightMoves(@ctz(bknights)) & ~black_pieces_occ) * activity_value;
+        black_pos_eval += @popCount(lookup_tables.getKnightMoveSet(@ctz(bknights)).mask & ~black_pieces_occ) * activity_value;
         black_pos_eval += KNIGHT_HEURISTICS[@ctz(bknights)];
     }
 
     var brooks = black_pieces[3];
     while (brooks > 0) : (brooks &= brooks - 1) {
-        black_pos_eval += @popCount(lookup_tables.getRookMoves(@ctz(brooks), occ) & ~black_pieces_occ) * activity_value;
+        black_pos_eval += @popCount(lookup_tables.getRookMoveSet(@ctz(brooks), occ).mask & ~black_pieces_occ) * activity_value;
     }
 
     return white_pos_eval - black_pos_eval;

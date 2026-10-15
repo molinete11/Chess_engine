@@ -17,7 +17,9 @@ fn perftDivide(board: *Board, depth: u32) void{
 
     for(0..move_list.count) |i|{
         const move = move_list.moves[i];
-        board.makeMove2(move);
+        if(!board.makeMove2(move)){
+            continue;
+        }
         const p = perft(board, depth - 1);
         //std.debug.print("0x{x} from {} to {}, flag {}\n", .{board.bitboards[Board.PieceBitboardIdx.toInt(.wRook)], move.from(), move.to(), move.flag()});
         std.debug.print("move {s} nodes {}\n", .{Uci.moveToUcimove(move), p});
@@ -42,7 +44,9 @@ fn perft(board: *Board, depth: u32) u64{
     for(0..moveList.count) |i|{
         //std.debug.print("{}\n", .{i});
 
-        board.makeMove2(moveList.moves[i]);
+        if(!board.makeMove2(moveList.moves[i])){
+            continue;
+        }
 
         nodes += perft(board, depth - 1);
 
