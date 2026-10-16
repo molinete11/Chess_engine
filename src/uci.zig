@@ -4,7 +4,9 @@ const benchmark = @import("benchmark.zig");
 const Board = @import("board.zig");
 const Move = @import("move.zig");
 const perft = @import("perft.zig");
+const Console = @import("console.zig");
 const mem = std.mem;
+const Allocator = mem.Allocator;
 const BitboardIdx = Board.PieceBitboardIdx;
 
 const Io = std.Io;
@@ -25,18 +27,18 @@ const squares = [_][]const u8{
                 };
 
 board: Board,
-writer: *Io.Writer,
-reader: *Io.Reader,
+console: *Console,
 io: Io,
+allocator: Allocator,
 // TODO: try another way of getting moves converted into text without using a global _buffer
 var movetext_buffer: [1024]u8 = undefined;
 
-pub fn Init(writer: *Io.Writer, reader: *Io.Reader, io: Io) Self{
+pub fn Init(io: Io, allocator: Allocator) !Self{
     return .{
         .board = Board.init(),
-        .writer = writer,
-        .reader = reader,
+        .console = try Console.init(io, allocator),
         .io = io,
+        .allocator = allocator,
     };
 }
 
@@ -47,8 +49,8 @@ pub fn run(self: *Self) !void{
     var buffer: []u8 = undefined;
 
     while(!exit){
-        buffer = try self.reader.takeDelimiterInclusive('\n');
-        buffer = buffer[0..buffer.len-1];
+        buffer = try self.console.readLn(self.allocator);
+        defer self.allocator.free(buffer);
         var tokens = std.mem.splitSequence(u8, buffer, " ");
         const token: []const u8 = tokens.first();
 
@@ -56,9 +58,9 @@ pub fn run(self: *Self) !void{
             exit = true;
         }
         else if(mem.eql(u8, token, "uci")){
-            try self.writer.print("id name Muu\n", .{});
-            try self.writer.print("id author Molinete11\n", .{});
-            try self.writer.print("uciok\n", .{});
+            try self.console.printLn("id name Muu", .{});
+            try self.console.printLn("id author Molinete11", .{});
+            try self.console.printLn("uciok", .{});
         }
         else if(mem.eql(u8, token, "position")){
             self.parsePosition(tokens.rest());
@@ -67,7 +69,7 @@ pub fn run(self: *Self) !void{
             self.board.restartPos();
         }
         else if(mem.eql(u8, token, "isready")){
-            try self.writer.print("readyok\n", .{});
+            try self.console.printLn("readyok", .{});
         }
         else if(mem.eql(u8, token, "go")){
             try self.parseGo(tokens.rest());
@@ -82,34 +84,34 @@ pub fn run(self: *Self) !void{
                 self.parseMove(move);
             }
         }else{
-            try self.writer.print("unrecognized command {s}\n", .{token});
+            try self.console.printLn("unrecognized command {s}", .{token});
         }
 
-        try self.writer.flush();
+        try self.console.flush();
     }
 }
 
 fn printBoard(self: *Self) !void{
     var rank: u8 = 7;
-    try self.writer.print("  ----------------------------------------------\n", .{});
+    try self.console.printLn("  ----------------------------------------------", .{});
     for(0..8) |_|{
         var file: u8 = 0;
         
-        try self.writer.print("|", .{});
+        try self.console.print("|", .{});
         for(0..8)|_|{
             const piece: u64 = self.board.bitboards[@intFromEnum(BitboardIdx.all)] & (@as(u64, 1) << @intCast(rank * 8 + file));
             const pSymbol = self.getPieceSymbol(piece);
 
-            try self.writer.print("  {c}  |", .{pSymbol});
+            try self.console.print("  {c}  |", .{pSymbol});
             file += 1;
         }
-        try self.writer.print("\n", .{});
-        try self.writer.print("  ----------------------------------------------\n", .{});
+        try self.console.printLn("", .{});
+        try self.console.printLn("  ----------------------------------------------", .{});
         rank -%= 1;
     }
 
-    try self.writer.print("fen: {s}\n", .{self.board.getFen()});
-    try self.writer.print("key: 0x{X}\n", .{self.board.key});
+    try self.console.printLn("fen: {s}", .{self.board.getFen()});
+    try self.console.printLn("key: 0x{X}", .{self.board.key});
 }
 
 fn getPieceSymbol(self: *Self, piece: u64) u8{
@@ -239,9 +241,9 @@ fn parseGo(self: *Self, args: []const u8) !void{
                         movetime); 
 
     if(move) |m|{
-        try self.writer.print("bestmove {s}\n", .{m});
+        try self.console.printLn("bestmove {s}", .{m});
     }else{
-        try self.writer.print("bestmove null\n", .{});
+        try self.console.printLn("bestmove null", .{});
     }
     
     
@@ -382,7 +384,6 @@ fn getToken(buffer: []const u8, idx: usize) Loc{
     }
 
     return loc;
-    
 }
 
 pub fn moveToUcimove(move: Move) []u8{

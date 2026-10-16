@@ -1,38 +1,46 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void{
-
+    
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const perft_test = b.addTest(.{
-        .name = "perft_test",
+
+    const exe = b.addExecutable(.{ 
+        .name = "Muu",
+        .use_llvm = true,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/perft.zig"),
-            .target = target,
             .optimize = optimize,
-        })
+            .target = target,
+            .root_source_file = b.path("src/main.zig"),
+        }),
     });
 
-    const run_preft = b.addRunArtifact(perft_test);
+    const tests = b.addTest(.{
+        .use_llvm = true,
+        .root_module = b.createModule(.{
+            .optimize = optimize,
+            .target = target,
+            .root_source_file = b.path("src/test.zig"),
+        }),
+        .test_runner = .{
+            .path = b.path("src/custom_test_runner.zig"),
+            .mode = .simple,
+        },
+    });
 
-    const test_perft_step = b.step("test_perft", "running perft checks");
-    test_perft_step.dependOn(&run_preft.step);
-
-    const exe = b.addExecutable(.{
-            .name = "Muu",
-            .use_llvm = true,
-            .root_module = b.createModule(.{ 
-                .root_source_file = b.path("src/main.zig"),
-                .target = b.graph.host,
-                .optimize = optimize,
-            }),
-        });
 
     b.installArtifact(exe);
 
-    const run_exe = b.addRunArtifact(exe);
+    const step_exe = b.addRunArtifact(exe);
+    
+    const run_step = b.step("run", "run the chess engine");
 
-    const run_step = b.step("run", "Running chess engine");
-    run_step.dependOn(&run_exe.step);
-}
+    run_step.dependOn(&step_exe.step);
+
+    const test_step_run = b.addRunArtifact(tests);
+
+    const test_step = b.step("test", "run all the tests");
+    test_step.dependOn(&test_step_run.step);
+
+}   

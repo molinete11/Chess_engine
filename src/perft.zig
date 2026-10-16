@@ -35,11 +35,7 @@ fn perft(board: *Board, depth: u32) u64{
     }
 
     var nodes: u64 = 0;
-    const moveList = board.generateMoves();
-
-    if(depth == 1){
-        return moveList.count;
-    }
+    const moveList = board.generateMoves(); 
 
     for(0..moveList.count) |i|{
         //std.debug.print("{}\n", .{i});

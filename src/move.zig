@@ -1,8 +1,6 @@
 const std = @import("std");
 const Self = @This();
 
-const BitSetU16 = std.bit_set.IntegerBitSet(u16);
-
 pub const Flags = enum(u4){
     quietMove = 0,
     doublePawnPush = 0b0001,

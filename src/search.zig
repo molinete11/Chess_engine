@@ -222,19 +222,19 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) ?SearchResul
             //    current_best_move_eval});
             break;
         }else{
-            //std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {} tot nodes {}\n", .{
-            //    time_spend_between_plys, 
-            //    time_allocated, 
-            //    c_depth,
-            //    uci.moveToUcimove(current_ply_best_move),
-            //    current_ply_best_move_eval,
-            //    total_nodes});
+            std.debug.print("time spend {}ms, time_left {}ms, current depth {} best move found {s} eval {} tot nodes {}\n", .{
+                time_spend_between_plys, 
+                time_allocated, 
+                c_depth,
+                uci.moveToUcimove(current_ply_best_move),
+                current_ply_best_move_eval,
+                total_nodes});
 
-            //for(0..main_pv_line.count) |j|{
-            //    std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
-            //}
+            for(0..main_pv_line.count) |j|{
+                std.debug.print(" {s} ", .{uci.moveToUcimove(main_pv_line.moves[j])});
+            }
 
-            //std.debug.print("\n", .{});
+            std.debug.print("\n", .{});
         }
 
         current_best_move = current_ply_best_move;
