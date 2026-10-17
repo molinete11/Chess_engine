@@ -1,7 +1,7 @@
 const std = @import("std");
 const Board = @import("board.zig");
 const lookup_tables = @import("lot.zig");
-const PieceBitboardIdx = Board.PieceBitboardIdx;
+const Piece = Board.Piece;
 
 const PAWN_VALUE: i32 = 100;
 const KNIGHT_VALUE: i32 = 320;
@@ -11,55 +11,46 @@ const QUEEN_VALUE: i32 = 900;
 
 const activity_value: i32 = 2;
 
-
 const PAWNS_HEURISTICS = [_]i32{
-    0, 0, 0, 0, 0, 0, 0, 0,
-    10, 10, 10, -20, -20, 10, 10, 10,
-    0, -5,-10,  10, 10,-10, -5,  0,
-    0,  0,  0, 40, 40,  0,  0,  0,
-    5,  5, 10, 25, 25, 10,  5,  5,
-    10, 10, 20, 30, 30, 20, 10, 10,
-    50, 50, 50, 50, 50, 50, 50, 50,
-     0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,   0,   0,   0,   0,  0,
+    10, 10, 10,  -20, -20, 10,  10, 10,
+    0,  -5, -10, 10,  10,  -10, -5, 0,
+    0,  0,  0,   40,  40,  0,   0,  0,
+    5,  5,  10,  25,  25,  10,  5,  5,
+    10, 10, 20,  30,  30,  20,  10, 10,
+    50, 50, 50,  50,  50,  50,  50, 50,
+    0,  0,  0,   0,   0,   0,   0,  0,
 };
 
 const KNIGHT_HEURISTICS = [_]i32{
-    -50,-40,-30,-30,-30,-30,-40,-50,
-    -40,-20,  0,  0,  0,  0,-20,-40,
-    -40,  0, 25, 10, 10, 25,  0,-40,
-    -40,  5, 10, 20, 20, 10,  5,-40,
-    -40,  0, 10, 20, 20, 10,  0,-40,
-    -40,  5, 25, 10, 10, 25,  5,-40,
-    -40,-20,  0,  5,  5,  0,-20,-40,
-    -50,-40,-35,-35,-35,-35,-40,-50,
-};
-const BISHOP_HEURISTICS = [_]i32{
-    -20,-10,-10,-10,-10,-10,-10,-20,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -10, 10, 10, 3, 3, 10, 10,-10,
-    -10,  0, 25, 10, 10, 25,  0,-10,
-    -10,  5,  5, 10, 10,  5,  5,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -20,-10,-10,-10,-10,-10,-10,-20,
+    -50, -40, -30, -30, -30, -30, -40, -50,
+    -40, -20, 0,   0,   0,   0,   -20, -40,
+    -40, 0,   25,  10,  10,  25,  0,   -40,
+    -40, 5,   10,  20,  20,  10,  5,   -40,
+    -40, 0,   10,  20,  20,  10,  0,   -40,
+    -40, 5,   25,  10,  10,  25,  5,   -40,
+    -40, -20, 0,   5,   5,   0,   -20, -40,
+    -50, -40, -35, -35, -35, -35, -40, -50,
 };
 
-const KING_HEURISTICS = [_]i32{ 
-    120, 150, 100, 0, 0, 0, 150, 120, 
-    5, 5, -5, -6, -6, -6, 5, 5, 
-    -10, -10, -10, -10, -10, -10, -10, -10, 
-    -50, -50, -50, -50, -50, -50, -50, -50, 
-    -70, -70, -70, -70, -70, -70, -70, -70, 
-    0, 0, 0, 0, 0, 0, 0, 0, 
-    0, 0, 0, 0, 0, 0, 0, 0, 
-    0, 0, 0, 0, 0, 0, 0, 0 
-    };
+const BISHOP_HEURISTICS = [_]i32{
+    -20, -10, -10, -10, -10, -10, -10, -20,
+    -10, 5,   0,   0,   0,   0,   5,   -10,
+    -10, 10,  10,  3,   3,   10,  10,  -10,
+    -10, 0,   25,  10,  10,  25,  0,   -10,
+    -10, 5,   5,   10,  10,  5,   5,   -10,
+    -10, 0,   5,   10,  10,  5,   0,   -10,
+    -10, 0,   0,   0,   0,   0,   0,   -10,
+    -20, -10, -10, -10, -10, -10, -10, -20,
+};
+
+const KING_HEURISTICS = [_]i32{ 120, 150, 100, 0, 0, 0, 150, 120, 5, 5, -5, -6, -6, -6, 5, 5, -10, -10, -10, -10, -10, -10, -10, -10, -50, -50, -50, -50, -50, -50, -50, -50, -70, -70, -70, -70, -70, -70, -70, -70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 {
     var white_pos_eval: i32 = 0;
 
-    const white_pieces_occ = board.bitboards[@intFromEnum(PieceBitboardIdx.white)];
-    const black_pieces_occ = board.bitboards[@intFromEnum(PieceBitboardIdx.black)];
+    const white_pieces_occ = board.bitboards[@backingInt(Piece.white)];
+    const black_pieces_occ = board.bitboards[@backingInt(Piece.black)];
     const occ: u64 = board.bitboards[14];
 
     var wpawns = white_pieces[0];
@@ -67,8 +58,8 @@ fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 
         white_pos_eval += @popCount(lookup_tables.getPawnMoveSet(@ctz(wpawns), 0).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += PAWNS_HEURISTICS[@ctz(wpawns)];
     }
-
-    var wbishops = white_pieces[1];
+Piece
+    var wbishops = white_pieces[1];Piece
     while (wbishops > 0) : (wbishops &= wbishops - 1) {
         white_pos_eval += @popCount(lookup_tables.getBishopMoveSet(@ctz(wbishops), occ).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += BISHOP_HEURISTICS[@ctz(wbishops)];
@@ -85,7 +76,7 @@ fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 
         white_pos_eval += @popCount(lookup_tables.getRookMoveSet(@ctz(wrooks), occ).mask & ~white_pieces_occ) * activity_value;
     }
 
-// ___________________________
+    // ___________________________
 
     var black_pos_eval: i32 = 0;
 
@@ -130,9 +121,9 @@ fn getMaterialEval(white_pieces: []u64, black_pieces: []u64) i32 {
     const black_rook: i32 = @bitCast(@as(u32, @popCount(black_pieces[3])));
     const black_queen: i32 = @bitCast(@as(u32, @popCount(black_pieces[4])));
 
-    const w = @Vector(5, i32){ white_pawns, white_bishop, white_knight, white_rook, white_queen};
+    const w = @Vector(5, i32){ white_pawns, white_bishop, white_knight, white_rook, white_queen };
 
-    const b = @Vector(5, i32){ black_pawns, black_bishop, black_knight, black_rook, black_queen};
+    const b = @Vector(5, i32){ black_pawns, black_bishop, black_knight, black_rook, black_queen };
 
     const e = @Vector(5, i32){ PAWN_VALUE, BISHOP_VALUE, KNIGHT_VALUE, ROOK_VALUE, QUEEN_VALUE };
 
@@ -142,14 +133,13 @@ fn getMaterialEval(white_pieces: []u64, black_pieces: []u64) i32 {
 }
 
 pub fn getEvaluation(board: *Board) i32 {
-    const white_pieces = board.bitboards[@intFromEnum(PieceBitboardIdx.wPawn)..(@intFromEnum(PieceBitboardIdx.wKing) + 1)];
-    const black_pieces = board.bitboards[@intFromEnum(PieceBitboardIdx.bPawn)..(@intFromEnum(PieceBitboardIdx.bKing) + 1)];
+    const white_pieces = board.bitboards[@backingInt(Piece.wPawn)..(@backingInt(Piece.wKing) + 1)];
+    const black_pieces = board.bitboards[@backingInt(Piece.bPawn)..(@backingInt(Piece.bKing) + 1)];
 
     const material_eval = getMaterialEval(white_pieces, black_pieces);
 
     var whiteKingSafe: i32 = 0;
     var blackKingSafe: i32 = 0;
-
 
     whiteKingSafe += KING_HEURISTICS[@ctz(white_pieces[5])];
 
@@ -160,10 +150,9 @@ pub fn getEvaluation(board: *Board) i32 {
     const pos_eval = getPositionEval(board, white_pieces, black_pieces);
     const kingSafe = whiteKingSafe - blackKingSafe;
 
-    const whiteToPlay: i32 = if(board.to_play == .white) 1 else -1;
+    const whiteToPlay: i32 = if (board.to_play == .white) 1 else -1;
 
-    return (material_eval + 
-            pos_eval + 
-            kingSafe
-            ) * whiteToPlay;
+    return (material_eval +
+        pos_eval +
+        kingSafe) * whiteToPlay;
 }
