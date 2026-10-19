@@ -91,7 +91,7 @@ fn printBoard(self: *Self) !void {
 
         try self.console.print("|", .{});
         for (0..8) |_| {
-            const piece: u64 = self.board.bitboards[@backingInt(BitboardIdx.all)] & (@as(u64, 1) << @intCast(rank * 8 + file));
+            const piece: u64 = self.board.notEmpty() & (@as(u64, 1) << @intCast(rank * 8 + file));
             const pSymbol = self.getPieceSymbol(piece);
 
             try self.console.print("  {c}  |", .{pSymbol});
@@ -107,26 +107,8 @@ fn printBoard(self: *Self) !void {
 }
 
 fn getPieceSymbol(self: *Self, piece: u64) u8 {
-    for (0..12) |i| {
-        if (self.board.bitboards[i] & piece > 0) {
-            switch (i) {
-                @backingInt(BitboardIdx.wPawn) => return 'P',
-                @backingInt(BitboardIdx.wBishop) => return 'B',
-                @backingInt(BitboardIdx.wKnight) => return 'N',
-                @backingInt(BitboardIdx.wRook) => return 'R',
-                @backingInt(BitboardIdx.wQueen) => return 'Q',
-                @backingInt(BitboardIdx.wKing) => return 'K',
-
-                @backingInt(BitboardIdx.bPawn) => return 'p',
-                @backingInt(BitboardIdx.bBishop) => return 'b',
-                @backingInt(BitboardIdx.bKnight) => return 'n',
-                @backingInt(BitboardIdx.bRook) => return 'r',
-                @backingInt(BitboardIdx.bQueen) => return 'q',
-                @backingInt(BitboardIdx.bKing) => return 'k',
-                else => return 'X',
-            }
-        }
-    }
+    _ = self;
+    _ = piece;
     return 'X';
 }
 

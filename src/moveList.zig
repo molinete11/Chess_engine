@@ -19,3 +19,7 @@ pub inline fn add(self: *Self, move: Move) void{
     self.count += 1;
 }
 
+pub inline fn empty(self: *const Self) bool{
+    return self.count == 0;
+}
+

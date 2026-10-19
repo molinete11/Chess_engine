@@ -10,6 +10,8 @@ pub fn main(init: std.process.Init) void{
     stdout = Io.File.stdout().writerStreaming(init.io, &out_buf);
     out = &stdout.interface;
 
+    const num_tests = builtin.test_functions.len;
+
     var success_counter: u32 = 0;
     var failure_counter: u32 = 0;
 
@@ -34,7 +36,7 @@ pub fn main(init: std.process.Init) void{
         out.flush() catch {};
     }
 
-    out.print("Tot test {}, passed {}, failed {}\n", .{success_counter + failure_counter, success_counter, failure_counter}) catch {};
+    out.print("Tot test {}, passed {}, failed {}\n", .{num_tests, success_counter, failure_counter}) catch {};
     out.flush() catch {};
 }
 

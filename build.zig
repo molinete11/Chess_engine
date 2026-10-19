@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) void{
         .root_module = b.createModule(.{
             .optimize = optimize,
             .target = target,
-            .root_source_file = b.path("src/board.zig"),
+            .root_source_file = b.path("src/test.zig"),
         }),
         .test_runner = .{
             .path = b.path("src/custom_test_runner.zig"),

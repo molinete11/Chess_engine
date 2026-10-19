@@ -11,6 +11,8 @@ const Bitboard = std.bit_set.Integer(64);
 
 pub const bishop_masks:     [64]Bitboard = initBishopMasks();
 pub const rook_masks:       [64]Bitboard = initRookMasks();
+pub const bishop_masks_with_borders: [64]Bitboard = initBishopMasks2();
+pub const rook_masks_with_borders: [64]Bitboard = initRookMasks2();
 
 pub const bishop_offsets:   [64]u32 = initBishopOffsets();
 pub const rook_offsets:     [64]u32 = initRookOffsets();
@@ -129,6 +131,47 @@ fn initRookMasks() [64]Bitboard{
 
         masks[i].mask |= (rank1 << (8 * rank)) & ~(@as(u64, 0x8080808080808080 | 0x101010101010101));
         masks[i].mask |= (afile << file) & ~(@as(u64, 0xff000000000000ff));
+        masks[i].mask =  masks[i].mask & (masks[i].mask ^ (@as(u64, 1) << @intCast(i)));
+    }
+
+    return masks;
+}
+
+fn initBishopMasks2() [64]Bitboard{
+    const m_diag: u64 = 0x8040201008040201;
+    const a_diag: u64 = 0x102040810204080;
+
+    var masks: [64]Bitboard = undefined;
+
+    for(0..64) |i|{
+        masks[i] = .empty;
+        const rank: i6 = @bitCast(@as(u6, @intCast(i >> 3)));
+        const file: i6 = @bitCast(@as(u6, @intCast(i & 7)));
+
+        const m_shift: i6 = file - rank;
+        const a_shift: i6 = 7 - file - rank;
+
+        masks[i].mask |= if(m_shift >= 0) m_diag >> @as(u6, @bitCast(m_shift)) * 8 else @shlWithOverflow(m_diag, @abs(m_shift) * 8)[0];
+        masks[i].mask |= if(a_shift >= 0) a_diag >> @as(u6, @bitCast(a_shift)) * 8 else @shlWithOverflow(a_diag, @abs(a_shift) * 8)[0];
+        masks[i].mask ^= @as(u64, 1) << @intCast(i);
+    }
+
+    return masks;
+}
+
+fn initRookMasks2() [64]Bitboard{
+    const rank1: u64 = 0xff;
+    const afile: u64 = 0x101010101010101;
+
+    var masks: [64]Bitboard = undefined;
+
+    for(0..64) |i|{
+        masks[i] = .empty;
+        const rank = i >> 3;
+        const file = i & 7;
+
+        masks[i].mask |= (rank1 << (8 * rank));
+        masks[i].mask |= (afile << file);
         masks[i].mask =  masks[i].mask & (masks[i].mask ^ (@as(u64, 1) << @intCast(i)));
     }
 
@@ -284,36 +327,11 @@ fn initKnightLookUpTable() [64]Bitboard {
 }
 
 pub inline fn getBishopMask(sq: usize) Bitboard{
-    const m_diag: u64 = 0x8040201008040201;
-    const a_diag: u64 = 0x102040810204080;
-
-    var set: Bitboard = .empty;
-    const rank: i6 = @bitCast(@as(u6, @intCast(sq >> 3)));
-    const file: i6 = @bitCast(@as(u6, @intCast(sq & 7)));
-
-    const m_shift: i6 = file - rank;
-    const a_shift: i6 = 7 - file - rank;
-
-    set.mask |= if(m_shift >= 0) m_diag >> @as(u6, @bitCast(m_shift)) * 8 else @shlWithOverflow(m_diag, @abs(m_shift) * 8)[0];
-    set.mask |= if(a_shift >= 0) a_diag >> @as(u6, @bitCast(a_shift)) * 8 else @shlWithOverflow(a_diag, @abs(a_shift) * 8)[0];
-    set.mask ^= @as(u64, 1) << @intCast(sq);
-
-    return set;
+    return bishop_masks_with_borders[sq];
 }
 
 pub inline fn getRookMask(sq: usize) Bitboard{
-    const rank1: u64 = 0xff;
-    const afile: u64 = 0x101010101010101;
-    
-    var set: Bitboard = .empty;
-
-    const rank: u6 = @as(u6, @intCast(sq)) >> 3;
-    const file: u6 = @as(u6, @intCast(sq)) & 7;
-
-    set.mask |= (rank1 << (8 * rank));
-    set.mask |= (afile << file);
-
-    return set;
+    return rook_masks_with_borders[sq];
 }
 
 pub inline fn getBishopMoveSet(sq: usize, occ: u64) Bitboard{
@@ -340,6 +358,7 @@ pub inline fn getPawnMoveSet(sq: usize, side: u1) Bitboard{
     return pawn_move_set[side][sq];
 }
 
-pub inline fn getPawnAttackSet(sq: usize, side: u1) Bitboard{
+pub inline fn getPawnAttackSet(sq: usize, side: usize) Bitboard{
+    std.debug.assert(side <= 1);
     return pawn_att_set[side][sq];
 }

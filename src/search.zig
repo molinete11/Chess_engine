@@ -25,7 +25,7 @@ fn qsearch(board: *Board) i32{
     var move_list = board.generateMoves();
 
     if(move_list.count == 0){
-        if(board.isKingInCheck(board.to_play, board.bitboards[14])){
+        if(board.isKingInCheck(board.to_play, board.notEmpty())){
             return check_mate_value;
         }else{
             return 0;
@@ -55,7 +55,13 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
 
     var move_list = board.generateMoves();
 
-
+    if(move_list.empty()){
+        if(board.isKingInCheck(board.to_play, board.notEmpty())){
+            return check_mate_value - @as(i32, @bitCast(depth));
+        }else{
+            return 0;
+        }
+    }
 
     moveOrdering(&move_list);
 
@@ -63,15 +69,11 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
     var next_alpha: i32 = alpha;
 
     var time_left_c = time_left;
-    var legal_moves: usize = 0;
 
     for (0..move_list.count) |i| {
         const clock = std.Io.Clock.awake.now(io);
 
-        if(!board.makeMove2(move_list.moves[i])){
-            continue;
-        }
-        legal_moves += 1;
+        board.makeMove2(move_list.moves[i]);   
 
         const oponent_score = negamax(
             board, 
@@ -114,13 +116,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
         }
     }
 
-    if(legal_moves == 0){
-        if(board.isKingInCheck(board.to_play, board.bitboards[14])){
-            return check_mate_value - @as(i32, @bitCast(depth));
-        }else{
-            return 0;
-        }
-    }
+
 
     return bestScore;
 }
@@ -128,6 +124,7 @@ fn negamax(board: *Board, depth: u32, alpha: i32, beta: i32, time_left: i64, io:
 fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) ?SearchResult{ 
     var time_allocated = time;
     var move_list = board.generateMoves();
+    if(move_list.empty()) return null;
     moveOrdering(&move_list);
 
     var current_best_move = std.mem.zeroes(Move);
@@ -146,7 +143,6 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) ?SearchResul
         };
 
         var alpha: i32 = std.math.minInt(i32) + 1;
-        var legal_moves: usize = 0;
 
         for(0..move_list.count) |i|{
             var nodes: u64 = 0;
@@ -163,10 +159,8 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) ?SearchResul
 
             //std.debug.print("move played {s}\n", .{uci.moveToUcimove(move)});
 
-            if(!board.makeMove2(move)){
-                continue;
-            }
-            legal_moves += 1;
+            board.makeMove2(move);
+            
             const current_move_eval = -negamax(board, 
                                                     @intCast(c_depth),
                                                     std.math.minInt(i32) + 1,
@@ -210,10 +204,6 @@ fn iterativeDeepening(io: Io, board: *Board, time: i64, depth: u32) ?SearchResul
             if(time_allocated <= 0){
                 break;
             }
-        }
-
-        if(legal_moves == 0){
-            return null;
         }
 
         if(time_allocated <= 0){

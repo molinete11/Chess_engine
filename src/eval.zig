@@ -46,20 +46,20 @@ const BISHOP_HEURISTICS = [_]i32{
 
 const KING_HEURISTICS = [_]i32{ 120, 150, 100, 0, 0, 0, 150, 120, 5, 5, -5, -6, -6, -6, 5, 5, -10, -10, -10, -10, -10, -10, -10, -10, -50, -50, -50, -50, -50, -50, -50, -50, -70, -70, -70, -70, -70, -70, -70, -70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-fn getPositionEval(board: *Board, white_pieces: []u64, black_pieces: []u64) i32 {
+fn getPositionEval(board: *Board, white_pieces: []const u64, black_pieces: []const u64) i32 {
     var white_pos_eval: i32 = 0;
 
-    const white_pieces_occ = board.bitboards[@backingInt(Piece.white)];
-    const black_pieces_occ = board.bitboards[@backingInt(Piece.black)];
-    const occ: u64 = board.bitboards[14];
+    const white_pieces_occ = board.occupancy(.white);
+    const black_pieces_occ = board.occupancy(.black);
+    const occ: u64 = board.notEmpty();
 
     var wpawns = white_pieces[0];
     while (wpawns > 0) : (wpawns &= wpawns - 1) {
         white_pos_eval += @popCount(lookup_tables.getPawnMoveSet(@ctz(wpawns), 0).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += PAWNS_HEURISTICS[@ctz(wpawns)];
     }
-Piece
-    var wbishops = white_pieces[1];Piece
+
+    var wbishops = white_pieces[1];
     while (wbishops > 0) : (wbishops &= wbishops - 1) {
         white_pos_eval += @popCount(lookup_tables.getBishopMoveSet(@ctz(wbishops), occ).mask & ~white_pieces_occ) * activity_value;
         white_pos_eval += BISHOP_HEURISTICS[@ctz(wbishops)];
@@ -108,7 +108,7 @@ Piece
     return white_pos_eval - black_pos_eval;
 }
 
-fn getMaterialEval(white_pieces: []u64, black_pieces: []u64) i32 {
+fn getMaterialEval(white_pieces: []const u64, black_pieces: []const u64) i32 {
     const white_pawns: i32 = @bitCast(@as(u32, @popCount(white_pieces[0])));
     const white_bishop: i32 = @bitCast(@as(u32, @popCount(white_pieces[1])));
     const white_knight: i32 = @bitCast(@as(u32, @popCount(white_pieces[2])));
@@ -133,8 +133,8 @@ fn getMaterialEval(white_pieces: []u64, black_pieces: []u64) i32 {
 }
 
 pub fn getEvaluation(board: *Board) i32 {
-    const white_pieces = board.bitboards[@backingInt(Piece.wPawn)..(@backingInt(Piece.wKing) + 1)];
-    const black_pieces = board.bitboards[@backingInt(Piece.bPawn)..(@backingInt(Piece.bKing) + 1)];
+    const white_pieces = board.pieces(.white);
+    const black_pieces = board.pieces(.black);
 
     const material_eval = getMaterialEval(white_pieces, black_pieces);
 
