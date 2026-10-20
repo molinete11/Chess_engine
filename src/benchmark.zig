@@ -1,6 +1,6 @@
 const std = @import("std");
 const perft = @import("perft.zig");
-const Board = @import("board.zig");
+const Board = @import("board/board.zig");
 
 
 pub fn runBench(io: std.Io) !void{
@@ -18,7 +18,7 @@ pub fn runBench(io: std.Io) !void{
 }
 
 fn runPerft(board: *Board, testName: []const u8, pos: []const u8, depth: u32, io: std.Io) !void{
-    board.setPos(pos) catch unreachable;
+    board.position.setPos(pos) catch unreachable;
     const start = std.Io.Clock.awake.now(io);
     
     const n = perft.start(board, depth, 0).?;

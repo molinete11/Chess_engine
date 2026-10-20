@@ -1,5 +1,5 @@
 const std = @import("std");
-const Board = @import("board.zig");
+const Board = @import("board/board.zig");
 const Uci = @import("uci.zig");
 const perft = @import("perft.zig").start;
 
@@ -8,7 +8,7 @@ const expectEqual = std.testing.expectEqual;
 
 
 const _ = {
-    @import("board.zig");
+    @import("board/board.zig");
     @import("perft.zig");
 };
 
@@ -17,19 +17,19 @@ test "perft" {
 
     try expectEqual(@as(u64, 119060324), perft(&board, 6, 0));
 
-    board.setPos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1") catch unreachable;
+    board.position.setPos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1") catch unreachable;
     try expectEqual(@as(u64, 193690690), perft(&board, 5, 0));
 
     
-    board.setPos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1") catch unreachable;
+    board.position.setPos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1") catch unreachable;
     try expectEqual(@as(u64, 11030083), perft(&board, 6, 0));
 
 
-    board.setPos("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1") catch unreachable;
+    board.position.setPos("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1") catch unreachable;
     try expectEqual(@as(u64, 706045033), perft(&board, 6, 0));
 
 
-    board.setPos("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8") catch unreachable;
+    board.position.setPos("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8") catch unreachable;
     try expectEqual(@as(u64, 89941194), perft(&board, 5, 0));
 }
 

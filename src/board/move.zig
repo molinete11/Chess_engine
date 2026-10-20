@@ -18,13 +18,13 @@ pub const Flags = enum(u4){
     queenPromotionCapture = 0b1111,
 
     pub inline fn toInt(self: @This()) u4{
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
 fromToFlags: u16,
 
-pub inline fn New(src: u6, dst: u6, f: Flags) 
+pub inline fn New(src: u6, dst: u6, comptime f: Flags) 
             Self
 {
     return .{

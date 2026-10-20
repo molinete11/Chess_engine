@@ -1,6 +1,5 @@
 const std = @import("std");
-const simd = @import("simd.zig");
-const c = @import("c");
+const simd = @import("../simd.zig");
 const Bitboard = std.bit_set.Integer(64);
 
 // rook size = 102400
@@ -11,8 +10,8 @@ const Bitboard = std.bit_set.Integer(64);
 
 pub const bishop_masks:     [64]Bitboard = initBishopMasks();
 pub const rook_masks:       [64]Bitboard = initRookMasks();
-pub const bishop_masks_with_borders: [64]Bitboard = initBishopMasks2();
-pub const rook_masks_with_borders: [64]Bitboard = initRookMasks2();
+pub const bishop_masks_b:   [64]Bitboard = initBishopMasks2();
+pub const rook_masks_b:     [64]Bitboard = initRookMasks2();
 
 pub const bishop_offsets:   [64]u32 = initBishopOffsets();
 pub const rook_offsets:     [64]u32 = initRookOffsets();
@@ -327,11 +326,11 @@ fn initKnightLookUpTable() [64]Bitboard {
 }
 
 pub inline fn getBishopMask(sq: usize) Bitboard{
-    return bishop_masks_with_borders[sq];
+    return bishop_masks_b[sq];
 }
 
 pub inline fn getRookMask(sq: usize) Bitboard{
-    return rook_masks_with_borders[sq];
+    return rook_masks_b[sq];
 }
 
 pub inline fn getBishopMoveSet(sq: usize, occ: u64) Bitboard{

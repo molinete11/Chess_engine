@@ -1,7 +1,8 @@
 const std = @import("std");
-const Board = @import("board.zig");
-const lookup_tables = @import("lot.zig");
-const Piece = Board.Piece;
+const Board = @import("board/board.zig");
+const Position = Board.Position;
+const lookup_tables = @import("board/lot.zig");
+const Piece = Position.Piece;
 
 const PAWN_VALUE: i32 = 100;
 const KNIGHT_VALUE: i32 = 320;
@@ -46,7 +47,7 @@ const BISHOP_HEURISTICS = [_]i32{
 
 const KING_HEURISTICS = [_]i32{ 120, 150, 100, 0, 0, 0, 150, 120, 5, 5, -5, -6, -6, -6, 5, 5, -10, -10, -10, -10, -10, -10, -10, -10, -50, -50, -50, -50, -50, -50, -50, -50, -70, -70, -70, -70, -70, -70, -70, -70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-fn getPositionEval(board: *Board, white_pieces: []const u64, black_pieces: []const u64) i32 {
+fn getPositionEval(board: *Position, white_pieces: []const u64, black_pieces: []const u64) i32 {
     var white_pos_eval: i32 = 0;
 
     const white_pieces_occ = board.occupancy(.white);
@@ -132,7 +133,7 @@ fn getMaterialEval(white_pieces: []const u64, black_pieces: []const u64) i32 {
     return res[0] + res[1] + res[2] + res[3] + res[4];
 }
 
-pub fn getEvaluation(board: *Board) i32 {
+pub fn getEvaluation(board: *Position) i32 {
     const white_pieces = board.pieces(.white);
     const black_pieces = board.pieces(.black);
 

@@ -1,13 +1,12 @@
 const search = @import("search.zig");
 const std = @import("std");
 const benchmark = @import("benchmark.zig");
-const Board = @import("board.zig");
-const Move = @import("move.zig");
+const Board = @import("board/board.zig");
+const Move = @import("board/move.zig");
 const perft = @import("perft.zig");
 const Console = @import("console.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const BitboardIdx = Board.Piece;
 
 const Io = std.Io;
 
@@ -62,7 +61,7 @@ pub fn run(self: *Self) !void {
         } else if (mem.eql(u8, token, "position")) {
             self.parsePosition(tokens.rest());
         } else if (mem.eql(u8, token, "ucinewgame")) {
-            self.board.restartPos();
+            self.board.position.restartPos();
         } else if (mem.eql(u8, token, "isready")) {
             try self.console.printLn("readyok", .{});
         } else if (mem.eql(u8, token, "go")) {
@@ -91,7 +90,7 @@ fn printBoard(self: *Self) !void {
 
         try self.console.print("|", .{});
         for (0..8) |_| {
-            const piece: u64 = self.board.notEmpty() & (@as(u64, 1) << @intCast(rank * 8 + file));
+            const piece: u64 = self.board.position.notEmpty() & (@as(u64, 1) << @intCast(rank * 8 + file));
             const pSymbol = self.getPieceSymbol(piece);
 
             try self.console.print("  {c}  |", .{pSymbol});
@@ -102,8 +101,8 @@ fn printBoard(self: *Self) !void {
         rank -%= 1;
     }
 
-    try self.console.printLn("fen: {s}", .{self.board.getFen()});
-    try self.console.printLn("key: 0x{X}", .{self.board.key});
+    try self.console.printLn("fen: {s}", .{self.board.position.getFen()});
+    try self.console.printLn("key: 0x{X}", .{self.board.position.key});
 }
 
 fn getPieceSymbol(self: *Self, piece: u64) u8 {
@@ -149,9 +148,9 @@ fn parseGo(self: *Self, args: []const u8) !void {
 
     var btime: i32 = std.math.maxInt(i32);
 
-    var winc: i32 = std.math.maxInt(i32);
+    var winc: i32 = 0;
 
-    var binc: i32 = std.math.maxInt(i32);
+    var binc: i32 = 0;
 
     const movetime: u32 = 0;
 
@@ -171,18 +170,6 @@ fn parseGo(self: *Self, args: []const u8) !void {
         if (mem.eql(u8, arg, "btime")) {
             if (tokens.next()) |bt| {
                 btime = std.fmt.parseInt(i32, bt, 10) catch unreachable;
-            }
-        }
-
-        if (mem.eql(u8, arg, "winc")) {
-            if (tokens.next()) |wi| {
-                winc = std.fmt.parseInt(i32, wi, 10) catch unreachable;
-            }
-        }
-
-        if (mem.eql(u8, arg, "binc")) {
-            if (tokens.next()) |bi| {
-                binc = std.fmt.parseInt(i32, bi, 10) catch unreachable;
             }
         }
         if (mem.eql(u8, arg, "winc")) {
@@ -207,7 +194,7 @@ fn parseGo(self: *Self, args: []const u8) !void {
 }
 
 fn parseMove(self: *Self, args: []const u8) void {
-    var moves = self.board.generateMoves();
+    var moves = self.board.generateMoves(.all);
     const fileFrom: u10 = args[0] - 'a';
     const rankFrom: u10 = args[1] - '1';
     const from: u10 = rankFrom * 8 + fileFrom;
@@ -224,7 +211,7 @@ fn parseMove(self: *Self, args: []const u8) void {
 
     for (0..moves.count) |i| {
         if (from == moves.moves[i].from() and to == moves.moves[i].to() and !isPromotion) {
-            _ = self.board.makeMove2(moves.moves[i]);
+            _ = self.board.position.makeMove2(moves.moves[i]);
             illegal = false;
             break;
         } else if (from == moves.moves[i].from() and to == moves.moves[i].to() and isPromotion) {
@@ -246,19 +233,19 @@ fn parseMove(self: *Self, args: []const u8) void {
             if (args[4] == 'q' and (moves.moves[promotionsAvailable[i]].flag() == .queenPromotion or
                 moves.moves[promotionsAvailable[i]].flag() == .queenPromotionCapture))
             {
-                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                self.board.position.makeMove2(moves.moves[promotionsAvailable[i]]);
             } else if (args[4] == 'r' and (moves.moves[promotionsAvailable[i]].flag() == .rookPromotion or
                 moves.moves[promotionsAvailable[i]].flag() == .rookPromotionCapture))
             {
-                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                self.board.position.makeMove2(moves.moves[promotionsAvailable[i]]);
             } else if (args[4] == 'n' and (moves.moves[promotionsAvailable[i]].flag() == .knightPromotion or
                 moves.moves[promotionsAvailable[i]].flag() == .knightPromotionCapture))
             {
-                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                self.board.position.makeMove2(moves.moves[promotionsAvailable[i]]);
             } else if (args[4] == 'b' and (moves.moves[promotionsAvailable[i]].flag() == .bishopPromotion or
                 moves.moves[promotionsAvailable[i]].flag() == .bishopPromotionCapture))
             {
-                _ = self.board.makeMove2(moves.moves[promotionsAvailable[i]]);
+                self.board.position.makeMove2(moves.moves[promotionsAvailable[i]]);
             }
         }
     }
@@ -271,7 +258,7 @@ fn parsePosition(self: *Self, args: []const u8) void {
     const farg = tokens.first();
 
     if (std.mem.eql(u8, farg, "startpos")) {
-        self.board.restartPos();
+        self.board.position.restartPos();
         valid = true;
     } else if (std.mem.eql(u8, farg, "fen")) {
         var fen: Loc = undefined;
@@ -283,7 +270,7 @@ fn parsePosition(self: *Self, args: []const u8) void {
             return;
         }
 
-        self.board.setPos(args[fen.start..fen.end]) catch {
+        self.board.position.setPos(args[fen.start..fen.end]) catch {
             std.log.err("Invalid pos: {s}\n", .{args[fen.start..fen.end]});
         };
 
